@@ -4,12 +4,12 @@ This file documents our ExFAT based design.
 
 ## Mapping virtual disk to MCU address space
 
-ExFAT supports a huge address space.
+ExFAT supports a huge address space, much larger than the RP2350 address space.
 
 However, the metadata region always sits in the beginning of the virtual disk address space.
 Hence, we cannot map one-to-one the MCU addresses to the virtual disk address space.
 
-In RP3250 case, the memories in the MCU address space are as follows:
+In RP2350 case, the memories in the MCU address space are as follows:
 
 | Segment | Base       | Length (max)   |
 | ------- | ---------- | -------------- |
@@ -17,25 +17,26 @@ In RP3250 case, the memories in the MCU address space are as follows:
 | Flash   | 0x10000000 | 2 Mb (64 Mb)   |
 | SRAM    | 0x20000000 | 520 kb (2 Mb?) |
 
-There are other segments higher in the MCU address space, providing access to the peripherals,
-but we are not interested in them. 
-The host will cache data anyway, making real-time access through the USB "disk" interface impossible. 
-Secondly, reading registers may have unwanted side effects.
+(There are other segments higher in the MCU address space, providing access to the peripherals,
+but we are not interested in them, for two reasons:
+Firstly, the host will cache data anyway,
+making real-time access through the USB "disk" interface impossible.
+Secondly, reading registers may have unwanted side effects.)a
 
-Given this, to simplify our design as much as possible, for forward compatibility we 
-assume that there are three memory spaces, each having a maximum size of 64 Mb,
+Given this, to simplify our design as much as possible, we initially
+assumed that there are three memory spaces, each having a maximum size of 64 Mb,
 starting at `0x0000 0000` (ROM), `0x1000 0000` (flash), `0x2000 0000` (SRAM).
 
-There are two options of covering these:
+There were two options of covering these:
 1. As 64 Mb memory spaces, back-to-back, totalling 128 Mb
 2. As 256 Mb memory spaces, including gaps, totalling 768 Mb.
 
-The latter has the benefit of making LBA to memory mapping trivial.
+The latter has the benefit of making LBA-to-memory mapping trivial and was chosen.
 
 ## Cluster and sector sizes: 4 kB, 8 × 512 B
 
 We decided to use the cluster size of 4 kB and sector size of 512 B.
-There is no choice for the sector size, as Pico [usb_device_msc.h]
+The latter is a common choice, e.g. the Pico ROM layer, [usb_device_msc.h]
 (https://github.com/raspberrypi/pico-extras/blob/master/src/rp2_common/usb_device_msc/include/pico/usb_device_msc.h#L10)
 defines `SECTOR_SIZE` as `512u`.
 
@@ -46,15 +47,15 @@ Notes:
 
 ## Address space mapping
 
-The easiest approach seems to map the 768 Mb of MCU address space 
+The easiest approach was to map the 3 * 256 = 768 Mb of MCU address space
 directly to the virtual disk address space.
-For that, we have two options:
+For that, we had two options:
 1. Map at a sector offset. The offset is needed so that the metadata can sit in the beginning of the disk.
 2. Map directly, but move the ROM segment at `0x00000000` to another virtual disk address.
 
 We chose the second approach, especially since providing the ROM image can be made a 
 compile time option, further minimizing the implementation if it is left out. 
-It is also so small, and will be, that it fits almost anywhere.
+(The ROM is also so small, just kilobytes, and will be, that it fits almost anywhere.)
 
 Hence, in terms of address mapping, we use the following:
 
@@ -66,25 +67,25 @@ Hence, in terms of address mapping, we use the following:
 
 Depending on the compile-time options (flash-only, also SRAM, etc)
 the apparent virtual disk size can be anything from `256 + 2` Mb to
-`768` Mb, or even larger if so desired.
+`768` Mb, or even larger, if so desired.
 
 ### FAT table considerations
 
-With exFAT, we don't need to generate FAT tables. Instead, we can use `NoFatChain` entries,
+With exFAT, we don't need to generate FAT cluster chains for the actual files.
+Instead, we can use `NoFatChain` entries,
 as defined in [§6.3.4.2]
 (https://github.com/MicrosoftDocs/win32/blob/docs/desktop-src/FileIO/exfat-specification.md#6342-nofatchain-field).
 With that, "the corresponding FAT entries for the clusters are invalid and implementations shall not interpret them".
 
-However, we need to reserve space for the primary FAT table, as some host implementations
-may assume they the FAT table is there and may get confused if there is none.
+We still need to generate FAT cluster chains for the exFAT allocation bitmap, up-case table
+and root directory.  However, these are small and generated at compile-time.
 
-To make things easy, we reserve FAT table space for (almost) 1 GB or 256k clusters.
+To make things easy, we reserve FAT table space for the (almost) 1 GB or 256k clusters.
 This is well below the Microsoft recommendation of [at most 16M clusters.]
 (https://github.com/MicrosoftDocs/win32/blob/docs/desktop-src/FileIO/exfat-specification.md#319-clustercount-field)
 
 To cover that many cluster indices, of 4 bytes each, our 
 virtual, non-existent FAT table occupies 1 Mb of the VD address space.
-It doesn't matter where we place it, as sane hosts will never read it.
 
 ### Cluster mapping
 
@@ -96,25 +97,28 @@ the FAT table offset must be at least 24 sectors and the data area (cluster heap
 starts at a natural boundary after the FAT(s).
 
 In the data area, the so-called cluster heap, the first cluster index is 2.
-However, we prefer to align also the cluster indices nicely with the MCU memory addresses.
-That helps us to compute the file directory entries on the fly.
+However, we preferred to align also the cluster indices nicely with the MCU memory addresses.
+That helped us to compute the file directory entries on the fly.
 
 With 24 reserved sectors and 2048 FAT table sectors, 
-we can place cluster #2 at any sector index at or beyond `24 + 2048 = 2072 = 0x818`.
+we were able to place cluster #2 at any sector index at or beyond `24 + 2048 = 2072 = 0x818`.
 
-Below is the resulting virtual‐disk layout when choosing the location for cluster #2, 
-leaving an unused gap before the cluster heap, to align flash and SRAM regions to “nice” cluster indices:
+We considered a few layouts, mostly based on our lessones learned from our earlier, abandoned
+[FAT16 design](/doc/FAT16-design.md), and chose one.
+
+Below is the resulting virtual‐disk layout, when choosing the location for cluster #2.
+This desing leaves an unused gap before the cluster heap, to align flash and SRAM regions to “nice” cluster indices:
 
 | Segment          | LBA Start   | LBA End     | MCU Addr Start | MCU Addr End  | Cluster Indices    |
 | ---------------- | ----------- | ----------- | -------------- | ------------- | ------------------ |
-| **Metadata**     | 0x00000     | 0x00017     | —              | —             | —                  |
-| **FAT area**     | 0x00018     | 0x00817     | —              | —             | —                  |
-| **Gap**          | 0x00818     | 0x0800F     | —              | —             | —                  |
-| **Metadata 2**   | 0x08010     | 0x0806F     | —              | —             | 2 – 13             |
-| **Free clusters**| 0x08070     | 0x7FFFF     | —              | —             | 14 – 0xEFFF        |
-| **Flash**        | 0x80000     | 0x80FFF     | 0x10000000     | 0x1001FFFF    | 0xF000 – 0xF1FF    |
-| **Unused**       | 0x81000     | 0xFFFFF     | –              | –             | 0xF200 – 0x1EFFF   |
-| **SRAM**         | 0x100000    | 0x10040F    | 0x20000000     | 0x20081FFF    | 0x1F000 – 0x1F081  |
+| **Metadata**     | 0x00000     | 0x00017     | -              | -             | -                  |
+| **FAT area**     | 0x00018     | 0x00817     | -              | -             | -                  |
+| **Gap**          | 0x00818     | 0x0800F     | -              | -             | -                  |
+| **Metadata 2**   | 0x08010     | 0x0806F     | -              | -             | 2 - ...            |
+| **Free clusters**| 0x08070     | 0x7FFFF     | -              | -             | ... - 0xEFFF       |
+| **Flash**        | 0x80000     | 0x80FFF     | 0x10000000     | 0x1001FFFF    | 0xF000 - 0xF1FF    |
+| **Unused**       | 0x81000     | 0xFFFFF     | -              | -             | 0xF200 - 0x1EFFF   |
+| **SRAM**         | 0x100000    | 0x10040F    | 0x20000000     | 0x20081FFF    | 0x1F000 - 0x1F081  |
 
 This layout sets the cluster‐heap offset to 32784 sectors (`0x8010`) so that 
 `cluster_index = 0xF000 + page_number` maps exactly to flash page LBAs. 
@@ -124,8 +128,9 @@ becomes a simple `0xF000 + start_page` computation.
 
 The MSC callback can directly translate LBA the to MCU addresses, with a left shift.
 
-Please note that it does not matter at all where the FAT table is, as it will be never read by
-any sane host.
+Once the design works fully reliably and needs no debugging, it may be beneficial to start
+the cluster heap immediately after the metadata.  However, getting all the math working
+both in the runtime library and in the test cases will take some more work.
 
 ## Root directory, up-case table and allocation bitmap
 
@@ -138,33 +143,39 @@ Some of the root directory entries we can construct at the compile time,
 including those for the allocation bitmap, up-case table, and volume label.
 Most of the actual file, stream extension and file name entries need to be generated
 on the fly, at runtime, based on the data from the partition table.
+
 The file, stream extension and file name entries for the optional non-partion files,
-includling `ROM.BIN` and `SRAM.BIN` can be constructed at the compile time.  As there
+includling `ROM.BIN` and `SRAM.BIN`, can be constructed at the compile time.  As there
 are just a few of these and they are each likely to take only 3 * 32 = 96 bytes,
 it is unlikely that space would be saved if trying to construct them at runtime.
 
 For each partition, the following directory entries are needed:
-- file and directory entry (1)
+- file and directory entry (1
 - stream extension entry (1)
-- file name entries (1–17): maximum name length 127 / characters per entry 15 = 17
+- file name entries (1 - 17): maxim name length 127 / characters per entry 15 = 17
 
-The minimum number of root directory entries is XXX, as follows:
-- mandatory entries (3): allocation bitmap, up-case table, volume label
+The minimum number of root directo entries is 309, as follows:
+- mandatory entries (3): allocation bitmap, up-case table, volume labe
 - nice-to-have entries (2): volume label, volume GUID
-- file entries for bootrom partitions (304): 16 x 19, for each partition file entry, stream extension, and 1–17 name entries
+- file entries for bootrom partitions (304): 16 x 19, for each partition file entry, stream extension, and 1 - 17 name entries
 
 For each additional file, such as `ROM.BIN` or `SRAM.BIN`, usually 3 entries are needed, unless the name is very long.
-
-Hence, typically we need to reserve a minimum of 308 entries, needing at least 20 sectors or 3 clusters.
-Consequently, we use 3 full clusters, giving us 384 directory entries in the root directory.
+Hence, typically we need to reserve a minimum of 309 entries, needing at least 20 sectors or 3 clusters.
+Consequently, we decided use 3 full clusters, giving us 384 directory entries in the root directory.
+While this is a compile time option, the design has not been tested with any other options.
 
 ### Up-case table
 
-For the upcase table, we use the minimal method in [§7.2.5 Table 24]
+For the upcase table, we planned to use the minimal method in [§7.2.5 Table 24]
 (https://github.com/MicrosoftDocs/win32/blob/docs/desktop-src/FileIO/exfat-specification.md#725-up-case-table)
-Compressed, that takes only 60 bytes.
+Compressed, that takes only 60 bytes. However, macOS does not like that but requires a full
+length upcase table.  The 60 bytes minimal table is there in the code, but at this point is
+not well tested nor available as a compile time option.  The plan is either remove it completely or make
+it into a compile time option, but that is not priority.
 
-Out of necessity, we need to preserve one cluster for the upcase table.
+We generate a full upcase-table on the fly, providing the real minimal upcase-table for the first 128
+characters, covering the ASCII code points, and an identity table for the rest.  This is not 100%
+according to the spec, but he best we can do without causing huge increase in memory use.
 
 ### Allocation bitmap
 
@@ -190,13 +201,13 @@ Alignment doesn't matter as the corresponding LBAs need only to be recognised, n
 
 | Segment               | LBA Start | LBA End  | MCU Addr Start | MCU Addr End | Cluster Indices   |
 | --------------------- | --------- | -------- | -------------- | ------------ | ----------------- |
-| **Allocation bitmap** | 0x08010   | 0x0804F  | —              | —            | 0x0002–0x0009     |
-| **Up-case table**     | 0x08050   | 0x08057  | —              | —            | 0x000A            |
-| **Root directory**    | 0x08058   | 0x0806F  | —              | —            | 0x000B–0x000D     |
+| **Allocation bitmap** | 0x08010   | 0x0804F  | -              | -            | 0x0002 - 0x0009   |
+| **Up-case table**     | 0x08050   | 0x08057  | -              | -            | 0x000A            |
+| **Root directory**    | 0x08058   | 0x0806F  | -              | -            | 0x000B - 0x000D   |
 
-## Placement of ROM (optional)
+## Placent of ROM (optional)
 
-Since the ROM resides at MCU address `0x00000000` and the VD metadata occupies the early LBAs, we cannot map it directly. Instead, we reserve a compile-time cluster index, `C_ROM`, within the free cluster range. The directory entry for `ROM.BIN` uses `first_cluster = C_ROM` and `data_length = ROM_SIZE`.
+Since t ROM resides at MCU address `0x00000000` and the VD metadata occupies the early LBAs, we cannot map it directly. Instead, we reserve a compile-time cluster index, `C_ROM`, within the free cluster range. The directory entry for `ROM.BIN` uses `first_cluster = C_ROM` and `data_length = ROM_SIZE`.
 
 When the host reads clusters of `ROM.BIN`, the MSC callback computes the byte offset into the ROM image as follows:
 
@@ -303,10 +314,10 @@ It consists of:
 - **VolumeLength (8 bytes):** Total number of sectors in the volume, computed as `CLUSTER_HEAP_OFFSET + CLUSTER_COUNT × SectorsPerCluster`.
 - **FATOffset (4 bytes):** Sector index of the first FAT. Set to 24, immediately after the reserved sectors.
 - **FATLength (4 bytes):** Length of the FAT area in sectors; sized to cover up to 256 k clusters (1 GB of data) even though the FAT entries are never actually used.
-- **ClusterHeapOffset (4 bytes):** Sector index where the cluster heap begins; aligned at `0x8010` to map cluster indices directly to MCU flash pages.
+- **ClusterHeapOffset (4 bytes):** Sector index where the cluster heap begins; aligned at `0x8010` to map cluster indices directly to MCU flash pages
 - **ClusterCount (4 bytes):** Total number of clusters in the heap (`256 k` in our default configuration).
-- **RootDirectoryCluster (4 bytes):** Starting cluster of the root directory; we reserve clusters 2–10 for allocation bitmap (8 clusters) and up-case table (1 cluster), so this is 11.
-- **VolumeSerialNumber (4 bytes):** A runtime-generated 32-bit serial (e.g. derived via the BootROM `get_sys_info` random field) to ensure volume-caching hosts detect changes across resets or layout updates.
+- **RootDirectoryCluster (4 bytes):** Starting cluster of the root directory; we reserve clusters 2 - 10 for alcation bitmap (8 clusters) and up-case table (1 cluster), so this is 11.
+- **VolumeSerialNumber (4 bytes):** A runtime-generated 32-bit serial (e.g. derived via the BootROM `get_sys_in`) to ensure volume-caching hosts detect changes across resets or layout updates.
 - **FileSystemRevision (2 bytes):** Version of the exFAT spec; set to `0x0100` for exFAT v1.0.
 - **VolumeFlags (2 bytes):** Currently zero; no special flags set.
 - **BytesPerSectorShift (1 byte):** Log₂ of the sector size; `9` to represent 512 B sectors.

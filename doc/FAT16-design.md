@@ -12,7 +12,7 @@ Because the metadata region always sits in the beginning of the virtual disk add
 and because the MCU address space is quite large (4 Gb), the logical block addresses (LBAs) 
 cannot be directly mapped to the MCU address space.
 
-In RP3250 case, the memories in the MCU address space are as follows:
+In RP2350 case, the memories in the MCU address space are as follows:
 
 +---------+------------+----------------+
 | Segment | Base       | Length (max)   |
@@ -159,7 +159,7 @@ Each directory entry is 32 B, with a 512 B sector having 16 directory entries.
   - The **starting cluster** in the directory entry is computed from the partition’s first flash page.  
   - The **file size** is set to the partition length in bytes.
 
-RP3250 partition names may be up to 127 UTF8 bytes long, mapping up to 254 Unicode characters,
+RP2350 partition names may be up to 127 UTF8 bytes long, mapping up to 254 Unicode characters,
 thereby requiring up to `254 / 13 = 20` VFAT entries.  
 With 16 partitions, we need `16 * (20 + 1) = 336` directory entries, 
 taking `336 / 16 = 21 sectors`.  
