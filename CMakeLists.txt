@@ -39,7 +39,7 @@ add_executable(picovd-tool
         )
 
 pico_set_program_name(picovd-tool "picovd-tool")
-pico_set_program_version(picovd-tool "0.1")
+pico_set_program_version(picovd-tool "0.2")
 
 # picovd-tool is meant to run from RAM
 pico_set_binary_type(picovd-tool no_flash)

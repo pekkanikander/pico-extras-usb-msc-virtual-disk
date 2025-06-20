@@ -1,8 +1,11 @@
 
 #include <pico/bootrom.h>
 
-#include "vd_exfat.h"
+#include "picovd_config.h"
+
 #include "vd_exfat_params.h"
+#include "vd_exfat.h"
+#include "vd_exfat_dirs.h"
 
 // Rotate right 32-bit by one bit
 static constexpr uint32_t ror32(uint32_t x) {
@@ -15,9 +18,10 @@ static constexpr uint32_t ror32(uint32_t x) {
  * See Microsoft spec §7.2 "Up-case Table Directory Entry" (Table 24)
  */
 
+#if EXFAT_UPCASE_TABLE_COMPRESSED
 // compressed version
 // WORD array, total length = 2 (run) + 26 (maps) + 2 (run) = 30 entries
-static uint16_t exfat_upcase_table_compressed[] = {
+extern "C" constexpr uint16_t exfat_upcase_table[] = {
     // 1) Run of identity: 97 codepoints (0...96)
     0xFFFF, 'a',
 
@@ -27,9 +31,11 @@ static uint16_t exfat_upcase_table_compressed[] = {
     'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X',
     'Y', 'Z',
 
-    // 3) Run of identity: 5 codepoints (123…127)
-    0xFFFF, 5
+    // 3) Run of identity: the rest of the codepoints, until 0xFFFF
+    0xFFFF, (0xFFFF - 'z'), // 0xFFFF - 122 = 0xFF85
 };
+
+#else
 
 // uncompressed version
 // 128 entries, 2 bytes each
@@ -52,6 +58,8 @@ extern "C" constexpr uint16_t exfat_upcase_table[] = {
     'X', 'Y', 'Z', 123, 124, 125, 126, 127,
 };
 
+#endif
+
 static constexpr size_t entry_count = sizeof(exfat_upcase_table) / sizeof(exfat_upcase_table[0]);
 
 /// Compile time computation of the checksum for the directory entry,
@@ -62,12 +70,17 @@ static constexpr uint32_t compute_upcase_checksum(void) {
     // Compute 32-bit TableChecksum: one ROR32 + add per byte over the entire up-case region
     uint32_t sum = 0;
 
+#if EXFAT_UPCASE_TABLE_COMPRESSED
+    // For a compressed up-case table, only the compressed entries count.
+    constexpr size_t total_words = entry_count;
+#else
     // Total number of 16-bit words in the on-disk up-case region
     constexpr size_t total_words =
         EXFAT_UPCASE_TABLE_LENGTH_CLUSTERS
       * EXFAT_SECTORS_PER_CLUSTER
       * EXFAT_BYTES_PER_SECTOR
       / sizeof(uint16_t);
+#endif
 
     // Total bytes = words × 2
     constexpr size_t total_bytes = total_words * 2;
@@ -90,7 +103,11 @@ static constexpr uint32_t compute_upcase_checksum(void) {
     return sum;
 }
 extern "C" constexpr size_t   exfat_upcase_table_len = sizeof(exfat_upcase_table);
+#ifdef __INTELLISENSE__
+extern "C" constexpr uint32_t exfat_upcase_table_checksum = 0;
+#else
 extern "C" constexpr uint32_t exfat_upcase_table_checksum = compute_upcase_checksum();
+#endif
 
 // ---------------------------------------------------------------------------
 // exFAT boot sector
@@ -244,82 +261,64 @@ extern "C" constexpr uint32_t EXFAT_VBR_CHECKSUM_SUFFIX
 // Compile-time first FAT sector beginning with initial cluster chains
 // -----------------------------------------------------------------------------
 
-// Helper: starting cluster numbers
-static constexpr uint32_t alloc_start_cluster   = EXFAT_ALLOCATION_BITMAP_START_CLUSTER;
-static constexpr uint32_t upcase_start_cluster  = EXFAT_UPCASE_TABLE_START_CLUSTER;
-static constexpr uint32_t root_start_cluster2   = EXFAT_ROOT_DIR_START_CLUSTER;
-static constexpr uint32_t root_length_clusters  = EXFAT_ROOT_DIR_LENGTH_CLUSTERS;
+#include <array>
+#include <algorithm>
 
-// XXX IMPROVE: Figure out how to use the same constants as in vd_exfat_params.h
-extern "C" constexpr uint8_t exfat_fat0_sector_data[] = {
-    // Reserved entries for clusters 0 and 1
-    U32_LE(0xFFFFFFF8u), // FAT[0]
-    U32_LE(0xFFFFFFFFu), // FAT[1]
+constexpr size_t exfat_fat0_entries =
+    2 /* reserved */ +
+    EXFAT_ALLOCATION_BITMAP_LENGTH_CLUSTERS +
+    EXFAT_UPCASE_TABLE_LENGTH_CLUSTERS +
+    EXFAT_ROOT_DIR_LENGTH_CLUSTERS;
 
-    // Allocation Bitmap chain: clusters 2..9
-    U32_LE(alloc_start_cluster + 1),
-    U32_LE(alloc_start_cluster + 2),
-    U32_LE(alloc_start_cluster + 3),
-    U32_LE(alloc_start_cluster + 4),
-    U32_LE(alloc_start_cluster + 5),
-    U32_LE(alloc_start_cluster + 6),
-    U32_LE(alloc_start_cluster + 7),
-    U32_LE(0xFFFFFFFFu), // end-of-chain for bitmap
+// Max cluster index we'll need to fill
+constexpr uint32_t exfat_fat0_required_size =
+    std::max({
+        EXFAT_ALLOCATION_BITMAP_START_CLUSTER + EXFAT_ALLOCATION_BITMAP_LENGTH_CLUSTERS,
+        EXFAT_UPCASE_TABLE_START_CLUSTER      + EXFAT_UPCASE_TABLE_LENGTH_CLUSTERS,
+        EXFAT_ROOT_DIR_START_CLUSTER          + EXFAT_ROOT_DIR_LENGTH_CLUSTERS
+    });
 
-    // Up-case Table chain: 32 clusters
-    U32_LE(upcase_start_cluster + 1),
-    U32_LE(upcase_start_cluster + 2),
-    U32_LE(upcase_start_cluster + 3),
-    U32_LE(upcase_start_cluster + 4),
-    U32_LE(upcase_start_cluster + 5),
-    U32_LE(upcase_start_cluster + 6),
-    U32_LE(upcase_start_cluster + 7),
-    U32_LE(upcase_start_cluster + 8),
-    U32_LE(upcase_start_cluster + 9),
-    U32_LE(upcase_start_cluster + 10),
-    U32_LE(upcase_start_cluster + 11),
-    U32_LE(upcase_start_cluster + 12),
-    U32_LE(upcase_start_cluster + 13),
-    U32_LE(upcase_start_cluster + 14),
-    U32_LE(upcase_start_cluster + 15),
-    U32_LE(upcase_start_cluster + 16),
+// The FAT sector will contain entries for clusters 0 to N
+constexpr std::array<uint32_t, exfat_fat0_required_size> generate_fat0_chains() {
+    std::array<uint32_t, exfat_fat0_required_size> fat{};
+    fat[0] = 0xFFFFFFF8u; // cluster 0
+    fat[1] = 0xFFFFFFFFu; // cluster 1
 
-    U32_LE(upcase_start_cluster + 17),
-    U32_LE(upcase_start_cluster + 18),
-    U32_LE(upcase_start_cluster + 19),
-    U32_LE(upcase_start_cluster + 20),
-    U32_LE(upcase_start_cluster + 21),
-    U32_LE(upcase_start_cluster + 22),
-    U32_LE(upcase_start_cluster + 23),
-    U32_LE(upcase_start_cluster + 24),
-    U32_LE(upcase_start_cluster + 25),
-    U32_LE(upcase_start_cluster + 26),
-    U32_LE(upcase_start_cluster + 27),
-    U32_LE(upcase_start_cluster + 28),
-    U32_LE(upcase_start_cluster + 29),
-    U32_LE(upcase_start_cluster + 30),
-    U32_LE(upcase_start_cluster + 31),
-    U32_LE(0xFFFFFFFFu), // end-of-chain for up-case table
+    auto continuous_chain = [&](uint32_t start, uint32_t length) {
+        for (uint32_t i = 0; i < length; ++i) {
+            uint32_t cluster = start + i;
+            if (i == length - 1) {
+                fat[cluster] = 0xFFFFFFFFu; // end of chain
+            } else {
+                fat[cluster] = cluster + 1;
+            }
+        }
+    };
 
-    // Root Directory chain: clusters 11..13
-    U32_LE(root_start_cluster2 + 1),
-    U32_LE(root_start_cluster2 + 2),
-    U32_LE(0xFFFFFFFFu), // end-of-chain for root dir
-};
+    continuous_chain(EXFAT_ALLOCATION_BITMAP_START_CLUSTER, EXFAT_ALLOCATION_BITMAP_LENGTH_CLUSTERS);
+    continuous_chain(EXFAT_UPCASE_TABLE_START_CLUSTER,      EXFAT_UPCASE_TABLE_LENGTH_CLUSTERS);
+    continuous_chain(EXFAT_ROOT_DIR_START_CLUSTER,          EXFAT_ROOT_DIR_LENGTH_CLUSTERS);
 
-extern "C" constexpr size_t exfat_fat0_sector_data_length =
-    sizeof(exfat_fat0_sector_data);
+    return fat;
+}
 
-_Static_assert(exfat_fat0_sector_data_length <= 512,
+static constexpr auto exfat_fat0_sector = generate_fat0_chains();
+extern "C" const uint32_t * const exfat_fat0_sector_data = exfat_fat0_sector.data();
+extern "C" const size_t           exfat_fat0_sector_data_len = exfat_fat0_sector.size() * sizeof(uint32_t);
+
+_Static_assert(exfat_fat0_sector_data_len <= 512,
     "First FAT sector fixed data must less than or equal to 512 bytes");
 
 // ---------------------------------------------------------------------------
-// Pre-constructed directory-entry structs for root directory
+// Pre-constructed first directory-entry structs for the root directory
+//
+// These entries should be in vd_exfat_dirs.c, but they need exfat_upcase_table_checksum
+// and exfat_upcase_table_len to be constexpr, which are defined here.
 // ---------------------------------------------------------------------------
 static constexpr exfat_volume_label_dir_entry_t volume_label_entry = {
     .entry_type   = exfat_entry_type_volume_label,
     .char_count   = EXFAT_VOLUME_LABEL_LENGTH,
-    .volume_label = EXFAT_VOLUME_LABEL_UTF16,
+    .volume_label = PICOVD_VOLUME_LABEL_UTF16,
     // reserved[8] are zero-initialized
 };
 
@@ -334,14 +333,15 @@ static constexpr exfat_upcase_table_dir_entry_t upcase_table_entry = {
     .entry_type     = exfat_entry_type_upcase_table,
     .table_checksum = exfat_upcase_table_checksum,  // now uint32_t
     .first_cluster  = EXFAT_UPCASE_TABLE_START_CLUSTER,
+#if EXFAT_UPCASE_TABLE_COMPRESSED
+    .data_length    = exfat_upcase_table_len, // 30 entries × 2 bytes each = 60 bytes
+#else
     .data_length    = EXFAT_UPCASE_TABLE_LENGTH_CLUSTERS * EXFAT_BYTES_PER_SECTOR * EXFAT_SECTORS_PER_CLUSTER,
+#endif
 };
 
-
-// 2) Create a constexpr instance of that struct, using your static entry structs
-extern "C" constexpr exfat_first_root_dir_entries_t exfat_root_dir_first_entries_data = {
+extern "C" constexpr exfat_root_dir_entries_first_t exfat_root_dir_first_entries_data = {
   volume_label_entry,
   allocation_bitmap_entry,
   upcase_table_entry,
-  { exfat_entry_type_end_of_directory }  // generic struct with only entry_type set
 };

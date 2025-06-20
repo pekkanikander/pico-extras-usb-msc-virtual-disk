@@ -9,11 +9,12 @@
 #include <string.h>
 
 #include <tusb.h>
-#include "vd_exfat.h"
+#include <picovd_config.h>
 #include "vd_exfat_params.h"
+#include "vd_exfat.h"
+#include "vd_virtual_disk.h"
 
 #include <pico/unique_id.h>
-
 
 #if CFG_TUD_MSC
 
@@ -28,14 +29,10 @@
  * --------------------------------------------------------------------------
  */
 
-// Function pointer type for region handlers: generate one full sector (MSC_BLOCK_SIZE bytes)
-// at the given LBA into the provided buffer, with offset and bufsize support.
-typedef void (*lba_read10_fn_t)(uint32_t lba, void* buffer, uint32_t offset, uint32_t bufsize);
-
 // Table entry: start_lba marks the first sector of a region,
 // handler is invoked for any LBA in that region.
 typedef struct {
-    lba_read10_fn_t handler;
+    usb_msc_lba_read10_fn_t handler;
     uint32_t        next_lba; // Next LBA after this region
 } lba_region_t;
 
@@ -46,36 +43,26 @@ static void gen_cksm_sector(uint32_t lba, void* buffer, uint32_t offset, uint32_
 static void gen_fat0_sector(uint32_t lba, void* buffer, uint32_t offset, uint32_t bufsize);
 static void gen_ones_sector(uint32_t lba, void* buffer, uint32_t offset, uint32_t bufsize);
 static void gen_upcs_sector(uint32_t lba, void* buffer, uint32_t offset, uint32_t bufsize);
-static void gen_dir0_sector(uint32_t lba, void* buffer, uint32_t offset, uint32_t bufsize);
 static void gen_dirs_sector(uint32_t lba, void* buffer, uint32_t offset, uint32_t bufsize);
 
 // Region table: each entry defines a region of the virtual disk
-// §2 Volume Structure
 static const lba_region_t lba_regions[] = {
+    // §2 Volume Structure
     { gen_boot_sector, 1 },  // LBA 0, §3.1 Boot Sector
     { gen_extb_sector, 9 },  // §3.2 Extended Boot Sectors
     { gen_zero_sector, 11 }, // §3.3 Main and Backup OEM Parameters
-#if 1
-    /* Don't emit a valid checksum sector yet, to avoid OS stalling */
     { gen_cksm_sector, 12 }, // §3.4 Main Boot Checksum Sub-region
-#else
-    { gen_zero_sector, 12 },
-#endif
     { gen_boot_sector, 13 }, // §3.1 Backup Boot Sector
     { gen_extb_sector, 21 }, // §3.2 Extended Boot Sectors (backup)
     { gen_zero_sector, 23 }, // §3.3 Main and Backup OEM Parameters (backup)
-#if 1
-    // §3.4 Backup Boot Checksum Sub-region
-    { gen_cksm_sector, 24 },
-#else
-    { gen_zero_sector, 24 },
-#endif
+    { gen_cksm_sector, 24 }, // §3.4 Backup Boot Checksum Sub-region
 #if EXFAT_FAT_REGION_START_LBA > 24
     // Space between Backup Boot Checksum Sub-region and FAT region, if any
     // This is not used in our exFAT, but we reserve it for future use.
     // It is zero-filled.
    { gen_zero_sector, EXFAT_FAT_REGION_START_LBA },
 #endif
+
     // §4   FAT region, first sector
     { gen_fat0_sector, EXFAT_FAT_REGION_START_LBA + 1 },
     // §4 Rest of FAT region and unused sectors
@@ -84,19 +71,35 @@ static const lba_region_t lba_regions[] = {
     // Space between FAT and Allocation Bitmap regions, if any
     { gen_zero_sector,  EXFAT_ALLOCATION_BITMAP_START_LBA, },
 #endif
+
     // §7.1 Allocation Bitmap region (not used in our exFAT)
     { gen_ones_sector, EXFAT_ALLOCATION_BITMAP_START_LBA + EXFAT_ALLOCATION_BITMAP_LENGTH_SECTORS, },
     // §7.2 Up-case Table first sector
     { gen_upcs_sector, EXFAT_UPCASE_TABLE_START_LBA + EXFAT_UPCASE_TABLE_LENGTH_SECTORS, },
     // §7.2 Zero sectors before the root directory
     { gen_zero_sector, EXFAT_ROOT_DIR_START_LBA, },
-    // §7.4 Root Directory first sector
-    { gen_dir0_sector, EXFAT_ROOT_DIR_START_LBA + 1, },
-#ifdef NOTYET
-    { gen_dirs_sector, XXX}, // §6/7 Root Directory region
-#else
-    { gen_zero_sector, EXFAT_ROOT_DIR_START_LBA + 2 },
+    // §7.4 Root Directory sectors, from vd_exfat_directory.c
+    { exfat_generate_root_dir_sector, EXFAT_ROOT_DIR_START_LBA + 1, },
+    { gen_zero_sector, EXFAT_ROOT_DIR_START_LBA + EXFAT_ROOT_DIR_LENGTH_SECTORS },
+
+#if PICOVD_BOOTROM_ENABLED
+    // BOOTROM.BIN file, from vd_rp2350.c
+    { gen_zero_sector, PICOVD_BOOTROM_START_LBA, },
+    { vd_return_bootrom_sector, PICOVD_BOOTROM_START_LBA + PICOVD_BOOTROM_SIZE_BYTES / EXFAT_BYTES_PER_SECTOR, },
 #endif
+
+#if PICOVD_FLASH_ENABLED
+    // FLASH.BIN file, from vd_rp2350.c
+    { gen_zero_sector, PICOVD_FLASH_START_LBA, },
+    { vd_return_flash_sector, PICOVD_FLASH_START_LBA + PICOVD_FLASH_SIZE_BYTES / EXFAT_BYTES_PER_SECTOR, },
+#endif
+
+#if PICOVD_SRAM_ENABLED
+    // SRAM.BIN file, from vd_rp2350.c
+    { gen_zero_sector, PICOVD_SRAM_START_LBA, },
+    { vd_return_sram_sector, PICOVD_SRAM_START_LBA + PICOVD_SRAM_SIZE_BYTES / EXFAT_BYTES_PER_SECTOR, },
+#endif
+
 };
 
 // Helper functions
@@ -212,6 +215,18 @@ static uint32_t compute_vbr_checksum_runtime_simple(void) {
     return sum;
 }
 
+// Compute the VBR checksum at runtime using an optimized algorithm.
+// This is a more efficient version that avoids the need to read sectors
+// and instead computes the checksum directly from the volume serial number.
+// It uses a compile-time prefix checksum and a suffix checksum, and rotates
+// the checksum value based on the serial number bytes.
+// This is based on the C++ implementation in vd_exfat.cpp.
+
+// XXX FIXME: this function is not yet used in the code, as it does not
+// pass the tests yet. It is a work in progress to replace the simple version
+// of the checksum computation with a more efficient one that does not require
+// reading the sectors at runtime. The goal is to optimize the VBR checksum
+// computation to avoid unnecessary reads and improve performance.
 static uint32_t compute_vbr_checksum_runtime_optimised(void) {
     // Phase 1: start from compile-time prefix checksum
     uint32_t sum = EXFAT_VBR_CHECKSUM_PREFIX;
@@ -259,9 +274,6 @@ static void gen_cksm_sector(uint32_t lba __unused, void* buffer, uint32_t offset
         checksum_value = compute_vbr_checksum_runtime();
     }
 
-    // For testing: checksum: 0xA2371AEB
-    // checksum_value = 0x91AA6311; // XXX FIXME: remove this line in production
-
     // Fill requested slice of sector 11 with the 32-bit checksum pattern
     uint8_t  *base8  = ((uint8_t *)buffer);
     // Fallback: byte-wise pattern respecting absolute byte positions
@@ -279,25 +291,18 @@ static void gen_fat0_sector(uint32_t lba __unused,
 {
     // Zero-fill the buffer
     memset(buffer, 0, bufsize);
+    const uint8_t* data = (const uint8_t*)exfat_fat0_sector_data;
 
     // Copy the precomputed FAT0 beginning entries
-    if (offset < exfat_fat0_sector_data_length) {
-        uint32_t copy_len = exfat_fat0_sector_data_length - offset;
+    if (offset < exfat_fat0_sector_data_len) {
+        size_t copy_len = exfat_fat0_sector_data_len - offset;
         if (copy_len > bufsize) copy_len = bufsize;
-        memcpy(buffer,
-               exfat_fat0_sector_data + offset,
-               copy_len);
+        memcpy(buffer, data + offset, copy_len);
     }
 }
 
 static void gen_upcs_sector(uint32_t lba, void* buffer, uint32_t offset, uint32_t bufsize)
 {
-#if 0
-    // This is a placeholder for future use, when we implement the checksum sector.
-    memset(buffer, 0, bufsize);
-    return;
-#endif
-
     // Ensure buffer and offsets are 16-bit aligned
     assert(((uintptr_t)buffer & 1) == 0);
     assert((offset & 1) == 0);
@@ -323,38 +328,18 @@ static void gen_upcs_sector(uint32_t lba, void* buffer, uint32_t offset, uint32_
         if (idx < exfat_upcase_table_len / sizeof(exfat_upcase_table[0])) {
             value = exfat_upcase_table[idx];
         } else {
-            // Identity mapping
-            value = (uint16_t)idx;
+            // Identity mapping or zero if compressed table
+            value = (EXFAT_UPCASE_TABLE_COMPRESSED? 0: (uint16_t)idx);
         }
         out[i] = value;
     }
 }
 
-static void gen_dir0_sector(uint32_t __unused lba, void* buffer, uint32_t offset, uint32_t bufsize) {
+// --------------------------------------------------------------------------
+// MSC Callbacks
+// --------------------------------------------------------------------------
 
-    assert(lba == EXFAT_ROOT_DIR_START_LBA);
-
-    const uint8_t* dir_data = (const uint8_t*)&exfat_root_dir_first_entries_data;
-    uint32_t dir_data_len = sizeof(exfat_root_dir_first_entries_data);
-
-    // If the requested slice overlaps the directory data, copy valid bytes
-    if (offset < dir_data_len) {
-        // Copy valid slice of the directory data
-        uint32_t to_copy = dir_data_len - offset;
-        if (to_copy > bufsize) to_copy = bufsize;
-        memcpy(buffer, dir_data + offset, to_copy);
-        if (to_copy < bufsize) {
-            memset((uint8_t*)buffer + to_copy, 0, bufsize - to_copy);
-        }
-    } else {
-        // Beyond end of directory data: return zeros
-        memset(buffer, 0, bufsize);
-    }
-}
-
-
-
-// Read10 callback: serve exFAT boot sector on LBA 0, zero for others
+// Read10 callback: serve LBA regions defined in the lba_regions table
 int32_t tud_msc_read10_cb(uint8_t lun         __unused,
                           uint32_t lba,
                           uint32_t offset     __unused,
@@ -384,6 +369,7 @@ void tud_msc_inquiry_cb(uint8_t lun,
                         uint8_t product_id[16],
                         uint8_t product_rev[4])
 {
+    // XXX FIXME: Replace with configuration strings
     memcpy(vendor_id,  "Raspberry",    8);
     memcpy(product_id, "Pico MSC Disk\0\0\0",16);
     memcpy(product_rev,"1.0 ",         4);

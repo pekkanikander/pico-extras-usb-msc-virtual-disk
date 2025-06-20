@@ -4,6 +4,13 @@
 #include <tusb_config.h>
 #include <assert.h>
 
+#ifdef __cplusplus
+  // C++11 and later: char16_t is a built-in type
+#else
+  typedef uint16_t char16_t;
+#endif
+
+
 // -----------------------------------------------------------------------------
 // Virtual disk parameters
 // -----------------------------------------------------------------------------
@@ -16,11 +23,12 @@
 
 // 1 GiB virtual disk size
 #define VIRTUAL_DISK_SIZE              (0x40000000)
-#define EXFAT_VOLUME_LABEL_UTF16       u"PicoVD"
+
+#define EXFAT_UPCASE_TABLE_COMPRESSED  (1)
 
 #define EXFAT_ALLOCATION_BITMAP_START_CLUSTER    2U
-#define EXFAT_UPCASE_TABLE_LENGTH_CLUSTERS      32U
 #define EXFAT_ROOT_DIR_LENGTH_CLUSTERS           3U
+
 
 // -----------------------------------------------------------------------------
 // USB MSC interface parameters
@@ -56,7 +64,8 @@
 #define EXFAT_FAT_REGION_LENGTH           (0x800)
 
 // LBA of the first data-cluster (ClusterHeapOffset in the boot sector)
-// Note the gap, see docs/exfat.md Section Cluster Mapping
+// Note the gap, see docs/ExFAT-design.md Section Cluster Mapping
+#define EXFAT_CLUSTER_HEAP_START_CLUSTER  (2) // Defined by MicroSoft
 #define EXFAT_CLUSTER_HEAP_START_LBA      (0x8010U)
 #define EXFAT_CLUSTER_COUNT               \
   (((MSC_TOTAL_BLOCKS - EXFAT_CLUSTER_HEAP_START_LBA) + (EXFAT_SECTORS_PER_CLUSTER - 1)) \
@@ -79,6 +88,8 @@ _Static_assert(EXFAT_ALLOCATION_BITMAP_LENGTH_CLUSTERS == 8,
 // Up-case Table region starts at after Allocation Bitmap, so its LBA is:
 #define EXFAT_UPCASE_TABLE_START_LBA       \
     (EXFAT_ALLOCATION_BITMAP_START_LBA + EXFAT_ALLOCATION_BITMAP_LENGTH_SECTORS)
+#define EXFAT_UPCASE_TABLE_LENGTH_CLUSTERS (\
+    (EXFAT_UPCASE_TABLE_COMPRESSED ? 1U : 32U)) // 1 clusters for compressed, 32 for uncompressed
 #define EXFAT_UPCASE_TABLE_LENGTH_SECTORS  \
     (EXFAT_UPCASE_TABLE_LENGTH_CLUSTERS * EXFAT_SECTORS_PER_CLUSTER)
 #define EXFAT_UPCASE_TABLE_START_CLUSTER   \
@@ -90,19 +101,21 @@ _Static_assert(EXFAT_ALLOCATION_BITMAP_LENGTH_CLUSTERS == 8,
 // -----------------------------------------------------------------------------
 
 // Root directory after the Allocation Bitmap and Up-case Table regions
-#define EXFAT_ROOT_DIR_START_LBA       \
-  (EXFAT_ALLOCATION_BITMAP_START_LBA   \
-    + EXFAT_ALLOCATION_BITMAP_LENGTH_SECTORS \
+#define EXFAT_ROOT_DIR_START_LBA               \
+  (EXFAT_ALLOCATION_BITMAP_START_LBA           \
+    + EXFAT_ALLOCATION_BITMAP_LENGTH_SECTORS   \
     + EXFAT_UPCASE_TABLE_LENGTH_SECTORS)
-#define EXFAT_ROOT_DIR_START_CLUSTER \
-    (EXFAT_ALLOCATION_BITMAP_START_CLUSTER \
+#define EXFAT_ROOT_DIR_START_CLUSTER           \
+    (EXFAT_ALLOCATION_BITMAP_START_CLUSTER     \
      + EXFAT_ALLOCATION_BITMAP_LENGTH_CLUSTERS \
      + EXFAT_UPCASE_TABLE_LENGTH_CLUSTERS)
+#define EXFAT_ROOT_DIR_LENGTH_SECTORS (        \
+    EXFAT_ROOT_DIR_LENGTH_CLUSTERS * EXFAT_SECTORS_PER_CLUSTER)
 
 _Static_assert(EXFAT_ROOT_DIR_START_LBA
                == (EXFAT_ROOT_DIR_START_CLUSTER - 2) * EXFAT_SECTORS_PER_CLUSTER
                    + EXFAT_CLUSTER_HEAP_START_LBA,
-               "Root directory start LBA must match the start cluster LBA");
+               "Root directory start LBA must match the start cluster number");
 
 // ----------------------------------------------------------------------------
 // Volume label and GUID
@@ -116,7 +129,7 @@ _Static_assert(EXFAT_ROOT_DIR_START_LBA
 
 #define EXFAT_VOLUME_LABEL_MAX_LENGTH 11U // Maximum length of the volume label in UTF-16
 #define EXFAT_VOLUME_LABEL_LENGTH \
-  ((sizeof(EXFAT_VOLUME_LABEL_UTF16) / sizeof(char16_t)) - 1) // Length in UTF-16 characters
+  ((sizeof(PICOVD_VOLUME_LABEL_UTF16) / sizeof(char16_t)) - 1) // Length in UTF-16 characters
 
 _Static_assert(EXFAT_VOLUME_LABEL_LENGTH <= EXFAT_VOLUME_LABEL_MAX_LENGTH,
                "Volume label must fit in the maximum length");

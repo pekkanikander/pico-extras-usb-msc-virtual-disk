@@ -145,7 +145,7 @@ Most of the actual file, stream extension and file name entries need to be gener
 on the fly, at runtime, based on the data from the partition table.
 
 The file, stream extension and file name entries for the optional non-partion files,
-includling `ROM.BIN` and `SRAM.BIN`, can be constructed at the compile time.  As there
+includling `BOOTROM.BIN` and `SRAM.BIN`, can be constructed at the compile time.  As there
 are just a few of these and they are each likely to take only 3 * 32 = 96 bytes,
 it is unlikely that space would be saved if trying to construct them at runtime.
 
@@ -159,7 +159,7 @@ The minimum number of root directo entries is 309, as follows:
 - nice-to-have entries (2): volume label, volume GUID
 - file entries for bootrom partitions (304): 16 x 19, for each partition file entry, stream extension, and 1 - 17 name entries
 
-For each additional file, such as `ROM.BIN` or `SRAM.BIN`, usually 3 entries are needed, unless the name is very long.
+For each additional file, such as `BOOTROM.BIN` or `SRAM.BIN`, usually 3 entries are needed, unless the name is very long.
 Hence, typically we need to reserve a minimum of 309 entries, needing at least 20 sectors or 3 clusters.
 Consequently, we decided use 3 full clusters, giving us 384 directory entries in the root directory.
 While this is a compile time option, the design has not been tested with any other options.
@@ -207,9 +207,11 @@ Alignment doesn't matter as the corresponding LBAs need only to be recognised, n
 
 ## Placent of ROM (optional)
 
-Since t ROM resides at MCU address `0x00000000` and the VD metadata occupies the early LBAs, we cannot map it directly. Instead, we reserve a compile-time cluster index, `C_ROM`, within the free cluster range. The directory entry for `ROM.BIN` uses `first_cluster = C_ROM` and `data_length = ROM_SIZE`.
+Since t ROM resides at MCU address `0x00000000` and the VD metadata occupies the early LBAs, we cannot map it directly.
+Instead, we reserve a compile-time cluster index, `C_ROM`, within the free cluster range.
+The directory entry for `BOOTROM.BIN` uses `first_cluster = C_ROM` and `data_length = ROM_SIZE`.
 
-When the host reads clusters of `ROM.BIN`, the MSC callback computes the byte offset into the ROM image as follows:
+When the host reads clusters of `BOOTROM.BIN`, the MSC callback computes the byte offset into the ROM image as follows:
 
 ```text
 rom_cluster_index        = 2 + (lba - CLUSTER_HEAP_OFFSET) / SECTORS_PER_CLUSTER
