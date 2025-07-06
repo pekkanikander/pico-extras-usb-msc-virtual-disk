@@ -79,8 +79,10 @@ static const lba_region_t lba_regions[] = {
     // §7.2 Zero sectors before the root directory
     { gen_zero_sector, EXFAT_ROOT_DIR_START_LBA, },
     // §7.4 Root Directory sectors, from vd_exfat_directory.c
-    { exfat_generate_root_dir_sector, EXFAT_ROOT_DIR_START_LBA + 1, },
-    { gen_zero_sector, EXFAT_ROOT_DIR_START_LBA + EXFAT_ROOT_DIR_LENGTH_SECTORS },
+    { exfat_generate_root_dir_fixed_sector,   EXFAT_ROOT_DIR_START_LBA + 1, },
+#if PICOVD_BOOTROM_PARTITIONS_ENABLED
+    { exfat_generate_root_dir_dynamic_sector, EXFAT_ROOT_DIR_START_LBA + EXFAT_ROOT_DIR_LENGTH_SECTORS },
+#endif
 
 #if PICOVD_BOOTROM_ENABLED
     // BOOTROM.BIN file, from vd_rp2350.c

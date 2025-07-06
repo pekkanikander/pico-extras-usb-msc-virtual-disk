@@ -27,8 +27,7 @@
 #define EXFAT_UPCASE_TABLE_COMPRESSED  (1)
 
 #define EXFAT_ALLOCATION_BITMAP_START_CLUSTER    2U
-#define EXFAT_ROOT_DIR_LENGTH_CLUSTERS           3U
-
+#define EXFAT_ROOT_DIR_LENGTH_CLUSTERS           3U // 1 + 8 sectors 
 
 // -----------------------------------------------------------------------------
 // USB MSC interface parameters

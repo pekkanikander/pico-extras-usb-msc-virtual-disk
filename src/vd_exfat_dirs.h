@@ -12,6 +12,7 @@
 // exFAT directory-entry type codes (entry_type field)
 typedef enum {
     exfat_entry_type_end_of_directory  = 0x00, ///< End-of-directory marker
+    exfat_entry_type_unused            = 0x01, ///< Unused entry
     exfat_entry_type_allocation_bitmap = 0x81, ///< Allocation Bitmap
     exfat_entry_type_upcase_table      = 0x82, ///< Up-case Table
     exfat_entry_type_volume_label      = 0x83, ///< Volume Label
@@ -162,14 +163,25 @@ typedef struct __packed {
 STATIC_ASSERT_PACKED(sizeof(exfat_file_name_dir_entry_t) == 32,
     "File Name exFAT directory entry must be 32 bytes");
 
-/// exFAT first root directory entries
-typedef struct __packed exfat_root_dir_entries_file {
+/// Compile time generated exFAT root directory entry sets
+typedef struct __packed exfat_root_dir_entries_fixed_file {
     exfat_file_directory_dir_entry_t      file_directory;    // 32 bytes
     exfat_stream_extension_dir_entry_t    stream_extension;  // 32 bytes
     exfat_file_name_dir_entry_t           file_name[1];      // n * 32 bytes
-} exfat_root_dir_entries_file_t;
-STATIC_ASSERT_PACKED(sizeof(exfat_root_dir_entries_file_t) == 3 * 32,
-    "exFAT file/directory entry set length must be >= 3 * 32 bytes");
+} exfat_root_dir_entries_fixed_file_t;
+STATIC_ASSERT_PACKED(sizeof(exfat_root_dir_entries_fixed_file_t) == 3 * 32,
+    "Fixed exFAT file/directory entry set length must be == 3 * 32 bytes");
+
+/// Dynamically generated exFAT root directory entry sets
+typedef struct __packed exfat_root_dir_entries_dynamic_file {
+    exfat_file_directory_dir_entry_t      file_directory;    // 32 bytes
+    exfat_stream_extension_dir_entry_t    stream_extension;  // 32 bytes
+    exfat_file_name_dir_entry_t           file_name[10];      // 10 * 32 bytes, 9 * 15 chars > 127 chars
+} exfat_root_dir_entries_dynamic_file_t;
+STATIC_ASSERT_PACKED(sizeof(exfat_root_dir_entries_dynamic_file_t) == 12 * 32,
+    "Dynamic exFAT file/directory entry set length must be == 12 * 32 bytes");
+static_assert(sizeof(exfat_root_dir_entries_dynamic_file_t) % CFG_TUD_MSC_EP_BUFSIZE == 0,
+    "Dynamic exFAT file/directory entry set length must be a multiple of MSC EP buffer size");
 
 #ifdef __cplusplus
 #define static_cast(type) static_cast<type>
@@ -200,13 +212,13 @@ extern "C" {
 extern const exfat_root_dir_entries_first_t exfat_root_dir_first_entries_data;
 
 // Directory entries for SRAM.BIN, pre-constructed
-extern const exfat_root_dir_entries_file_t exfat_root_dir_sram_file_data;
+extern const exfat_root_dir_entries_fixed_file_t exfat_root_dir_sram_file_data;
 
 // Directory entries for BOOTROM.BIN, pre-constructed
-extern const exfat_root_dir_entries_file_t exfat_root_dir_bootrom_file_data;
+extern const exfat_root_dir_entries_fixed_file_t exfat_root_dir_bootrom_file_data;
 
 // Directory entries for FLASH.BIN, pre-constructed
-extern const exfat_root_dir_entries_file_t exfat_root_dir_flash_file_data;
+extern const exfat_root_dir_entries_fixed_file_t exfat_root_dir_flash_file_data;
 
 #ifdef __cplusplus
 }

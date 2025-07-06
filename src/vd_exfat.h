@@ -49,10 +49,11 @@ extern const size_t   exfat_upcase_table_len; /// Length of the up-case table in
 extern const uint32_t exfat_upcase_table_checksum; ///< Checksum of the up-case table
 
 // ---------------------------------------------------------------
-// Function to generate the root directory sector
+// Functions to generate the root directory sectors
 // ---------------------------------------------------------------
 // This function generates the root directory sector data for exFAT.
-extern  void exfat_generate_root_dir_sector(uint32_t lba, void* buffer, uint32_t offset, uint32_t bufsize);
+extern  void exfat_generate_root_dir_fixed_sector(uint32_t lba, void* buffer, uint32_t offset, uint32_t bufsize);
+extern  void exfat_generate_root_dir_dynamic_sector(uint32_t lba, void* buffer, uint32_t offset, uint32_t bufsize);
 
 // ---------------------------------------------------------------
 // Macro to compute an LBA from a cluster number

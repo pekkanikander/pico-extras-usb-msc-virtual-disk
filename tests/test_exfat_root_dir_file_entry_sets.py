@@ -99,9 +99,10 @@ def test_exfat_root_dir_file_entry_sets(bootsector_data, read_raw_sector):
     while offset < cluster_size:
         entry_type = data[offset]
 
-        # 0x00 = Unused entry  → we can safely stop here (spec §7.1.2)
-        if entry_type == 0x00:
-            break
+        # 0x01 = Unused entry → skip (unused slots may exist between sets)
+        if entry_type == 0x01:
+            offset += 32
+            continue
 
         # 0x80 = End-of-directory entry  → stop (no active entries after this)
         if entry_type == 0x80:

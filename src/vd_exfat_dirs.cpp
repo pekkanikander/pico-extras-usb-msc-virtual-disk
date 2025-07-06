@@ -55,7 +55,7 @@ static constexpr exfat_file_name_dir_entry_t sram_file_name_entry = {
     .file_name  = PICOVD_SRAM_FILE_NAME,
 };
 
-extern "C" constexpr exfat_root_dir_entries_file_t exfat_root_dir_sram_file_data = {
+extern "C" constexpr exfat_root_dir_entries_fixed_file_t exfat_root_dir_sram_file_data = {
     file_dir_entry,        // Primary File Directory entry
     sram_stream_entry,          // Stream Extension entry
   { sram_file_name_entry, },   // File Name entry
@@ -85,7 +85,7 @@ static constexpr exfat_file_name_dir_entry_t bootrom_file_name_entry = {
     .file_name  = PICOVD_BOOTROM_FILE_NAME,
 };
 
-extern "C" constexpr exfat_root_dir_entries_file_t exfat_root_dir_bootrom_file_data = {
+extern "C" constexpr exfat_root_dir_entries_fixed_file_t exfat_root_dir_bootrom_file_data = {
     file_dir_entry,
     bootrom_stream_entry,
   { bootrom_file_name_entry, },
@@ -115,7 +115,7 @@ static constexpr exfat_file_name_dir_entry_t flash_file_name_entry = {
     .file_name  = PICOVD_FLASH_FILE_NAME,
 };
 
-extern "C" constexpr exfat_root_dir_entries_file_t exfat_root_dir_flash_file_data = {
+extern "C" constexpr exfat_root_dir_entries_fixed_file_t exfat_root_dir_flash_file_data = {
     file_dir_entry,
     flash_stream_entry,
   { flash_file_name_entry, },
