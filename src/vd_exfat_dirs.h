@@ -91,8 +91,6 @@ typedef struct __packed exfat_root_dir_entries_first {
 
 STATIC_ASSERT_PACKED(sizeof(exfat_root_dir_entries_first_t) == 3 * 32, "must be 3 * 32 bytes");
 
-
-
 /// exFAT File Directory Entry attribute bits (Table 28)
 typedef enum  {
     EXFAT_FILE_ATTR_READ_ONLY  = 0x0001,  ///< read-only file
