@@ -189,7 +189,7 @@ static bool build_partition_entry_set(uint32_t part_idx) {
     = rom_get_partition_table_info(pt_buf,
         (uint32_t)(sizeof(pt_buf)/sizeof(pt_buf[0])),
         flags);
-    if (words < 0) {
+    if (words < 3 /* XXX FIXME */) {
         return false; // BootROM error (invalid idx, hash mismatch, ...)
     }
 
@@ -198,8 +198,8 @@ static bool build_partition_entry_set(uint32_t part_idx) {
     uint32_t flg  = *p++;                // permissions_and_flags
 
     // Extract start address and length (see §5.9.4.2 of the datasheet)
-    uint32_t flash_off  = (loc & 0x00FFFFFFu) * 4096u;        // 4‑kB units
-    uint32_t flash_size = (loc >> 24) * 4096u;
+    uint32_t flash_page  =  (loc & 0x0001FFFFu);   // 4‑kB units, matching cluster size
+    uint32_t flash_size  = ((loc & 0x03ffe000u) >> 17) * 4096u;
 
     // NAME field
     uint8_t  name_len   = (*(uint8_t *)p) & 0x7F;
@@ -221,10 +221,7 @@ static bool build_partition_entry_set(uint32_t part_idx) {
     des.stream_extension.valid_data_length = (uint64_t)flash_size;
     des.stream_extension.data_length       = (uint64_t)flash_size;
     // First cluster calculation: clusters start at 2
-    des.stream_extension.first_cluster
-        = flash_size
-        ? (flash_off / (EXFAT_BYTES_PER_SECTOR * EXFAT_SECTORS_PER_CLUSTER)) + PICOVD_FLASH_START_CLUSTER
-        : 0;
+    des.stream_extension.first_cluster = flash_size? flash_page + PICOVD_FLASH_START_CLUSTER : 0;
 
     // Expand the name to UTF‑16LE
     assert(name_len <= 127);

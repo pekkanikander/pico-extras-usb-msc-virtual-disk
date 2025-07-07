@@ -32,7 +32,7 @@
 // Add support for FLASH file
 // This will enable the generation of a file named "FLASH.BIN" in the exFAT filesystem.
 // The file will be generated from the contents of the Flash segment on the RP2530
-#define PICOVD_FLASH_ENABLED            (1)
+#define PICOVD_FLASH_ENABLED            (0)
 #define PICOVD_FLASH_FILE_NAME          u"FLASH.BIN"
 #define PICOVD_FLASH_FILE_NAME_LEN      9u
 #define PICOVD_FLASH_SIZE_BYTES         (0x200000) // 2 Mb
