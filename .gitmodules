@@ -1,0 +1,4 @@
+[submodule "lib/tinyusb"]
+	path = lib/tinyusb
+	url = git@github.com:pekkanikander/tinyusb.git
+	branch = master
