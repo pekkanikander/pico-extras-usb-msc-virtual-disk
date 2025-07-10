@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include <tusb.h>
+#include <class/msc/msc.h>
 #include <picovd_config.h>
 #include "vd_exfat_params.h"
 #include "vd_exfat.h"
@@ -337,9 +338,20 @@ static void gen_upcs_sector(uint32_t lba, void* buffer, uint32_t offset, uint32_
     }
 }
 
-// --------------------------------------------------------------------------
-// MSC Callbacks
-// --------------------------------------------------------------------------
+/*
+ * --------------------------------------------------------------------------
+ * MSC SCSI Callback Section
+ *
+ * This section implements callbacks for TinyUSB's Mass Storage Class (MSC)
+ * using the SCSI transparent command set.
+ *
+ * References:
+ *  - USB Mass Storage Class (MSC) Bulk-Only Transport (BOT), Rev. 1.0:
+ *    https://www.usb.org/sites/default/files/usbmassbulk_10.pdf
+ *  - SCSI Primary Commands - 4 (SPC-4), T10/1731-D:
+ *    https://www.t10.org/members/w_spc4.htm
+ * --------------------------------------------------------------------------
+ */
 
 // Read10 callback: serve LBA regions defined in the lba_regions table
 int32_t tud_msc_read10_cb(uint8_t lun         __unused,
@@ -362,8 +374,6 @@ int32_t tud_msc_read10_cb(uint8_t lun         __unused,
     memset(buffer, 0, bufsize);
     return bufsize;
 }
-
-
 
 // SCSI Inquiry: return manufacturer, product, revision strings
 void tud_msc_inquiry_cb(uint8_t lun,
@@ -404,29 +414,174 @@ bool tud_msc_start_stop_cb(uint8_t lun,
     return true;
 }
 
+// Additional Sense Code and Qualifier for Write Protected (per SPC-4 §6.7)
+#ifndef SCSI_ASC_WRITE_PROTECTED
+#define SCSI_ASC_WRITE_PROTECTED  0x27
+#endif
+#ifndef SCSI_ASCQ_WRITE_PROTECTED
+#define SCSI_ASCQ_WRITE_PROTECTED 0x00
+#endif
 
+#ifndef SCSI_CMD_FORMAT_UNIT
+#define SCSI_CMD_FORMAT_UNIT      0x04
+#endif
+#ifndef SCSI_CMD_BLANK
+#define SCSI_CMD_BLANK            0x19
+#endif
+#ifndef SCSI_CMD_UNMAP
+#define SCSI_CMD_UNMAP            0x42
+#endif
+#ifndef SCSI_CMD_MODE_SELECT_10
+#define SCSI_CMD_MODE_SELECT_10   0x55
+#endif
+#ifndef SCSI_CMD_WRITE12
+#define SCSI_CMD_WRITE12          0xAA
+#endif
+#ifndef SCSI_CMD_WRITE16
+#define SCSI_CMD_WRITE16          0x8A
+#endif
 
-// Write10 callback: discard data
+#ifndef SCSI_CMD_MODE_SENSE_10
+#define SCSI_CMD_MODE_SENSE_10    0x5A
+
+// Mode Parameter Header (10) for MODE SENSE (10) – SPC-4 §5.5.4
+typedef struct TU_ATTR_PACKED {
+  uint16_t data_len;        // Mode Data Length (big-endian)
+  uint8_t  medium_type;     // 0 = direct-access
+  uint8_t  dev_spec_params; // bit7 = WP
+  uint8_t  reserved;
+  uint16_t blk_desc_len;    // Block-Descriptor Length (big-endian)
+  uint8_t  reserved2;
+} scsi_mode_sense10_resp_t;
+_Static_assert(sizeof(scsi_mode_sense10_resp_t) == 8, "SCSI Mode Sense (10) response size mismatch");
+
+#endif
+
+/**
+ * @brief SCSI WRITE10 command callback, enforcing read-only medium.
+ *
+ * Always fails write attempts by returning an error and reporting
+ * write-protected sense, conforming to SPC-4 §6.7 and USB MSC BOT spec §6.4.
+ */
 int32_t tud_msc_write10_cb(uint8_t lun,
                            uint32_t lba,
                            uint32_t offset,
                            uint8_t* buffer,
                            uint32_t bufsize)
 {
-    (void) lun;
     (void) lba;
     (void) offset;
     (void) buffer;
-    return bufsize;
+
+    // Queue sense data: Data Protect (0x07), Write Protected (0x27, 0x00)
+    tud_msc_set_sense(lun,
+                      SCSI_SENSE_DATA_PROTECT,
+                      SCSI_ASC_WRITE_PROTECTED,
+                      SCSI_ASCQ_WRITE_PROTECTED);
+
+    // Indicate command failure to the host
+    return TUD_MSC_RET_ERROR;
 }
 
-// SCSI command callback: use TinyUSB default handling
+/**
+ * @brief SCSI transparent command callbacks.
+ *
+ * Handles MODE SENSE (6) to report a write-protected medium.
+ * Other SCSI commands use TinyUSB's default handling.
+ *
+ * SPC-4 §5.5.3: Mode Sense (6) returns a 4-byte Mode Parameter Header.
+ *  - Byte 0: Mode Data Length (n-1 bytes following)
+ *  - Byte 1: Medium Type (0 = direct-access)
+ *  - Byte 2: Device-Specific Parameter (bit7 = WP)
+ *  - Byte 3: Block Descriptor Length (0)
+ */
+int32_t tud_msc_scsi_pre_cb(uint8_t lun,
+                           uint8_t const scsi_cmd[16],
+                           void* buffer,
+                           uint16_t bufsize)
+{
+    switch (scsi_cmd[0]) {
+    case SCSI_CMD_INQUIRY:
+    {
+        // Build Inquiry response, reporting write-protected media
+        scsi_inquiry_resp_t* resp = (scsi_inquiry_resp_t*)buffer;
+        memset(resp, 0, sizeof(*resp));
+
+        resp->peripheral_device_type = 0;
+        resp->peripheral_qualifier   = 0;
+        resp->is_removable           = 1;
+        resp->version                = 2;
+        resp->response_data_format   = 2;
+        resp->additional_length      = sizeof(scsi_inquiry_resp_t) - 5;
+
+        // Set Write Protect flag (bit in byte 5)
+        resp->protect                = 1;
+
+        // Fill in vendor, product and revision strings, using TinyUSB's callback
+        tud_msc_inquiry_cb(lun,
+                          resp->vendor_id,
+                          resp->product_id,
+                          resp->product_rev);
+
+        // Return entire inquiry response size
+        return sizeof(*resp);
+    }
+    case SCSI_CMD_MODE_SENSE_6:
+    {
+        // Build 4-byte Mode Parameter Header
+        scsi_mode_sense6_resp_t* resp = (scsi_mode_sense6_resp_t*)buffer;
+        memset(resp, 0, sizeof(*resp));
+        // Mode Data Length: number of bytes following this field (3)
+        resp->data_len = sizeof(*resp) - 1;
+        // Medium Type = 0 (direct-access), already zeroed
+        // Device-Specific Parameter: set Write-Protect bit
+        resp->write_protected = true;
+        // Block Descriptor Length = 0, already zeroed
+        return sizeof(*resp);
+    }
+    }
+    return -1; // Fallback to default handling
+}
+
 int32_t tud_msc_scsi_cb(uint8_t lun,
                         uint8_t const scsi_cmd[16],
                         void* buffer,
                         uint16_t bufsize)
 {
-    return 0;
+    switch (scsi_cmd[0]) {
+    /*
+     * Reject any SCSI commands that would alter the medium on a read-only device.
+     * These include MODE SELECT, UNMAP, FORMAT UNIT, and BLANK. Always report
+     * Data Protect (Write Protected) sense per SPC-4 §6.7.
+     */
+    case SCSI_CMD_MODE_SELECT_6:
+    case SCSI_CMD_MODE_SELECT_10:
+    case SCSI_CMD_UNMAP:
+    case SCSI_CMD_FORMAT_UNIT:
+    case SCSI_CMD_BLANK:
+    case SCSI_CMD_WRITE12:
+    case SCSI_CMD_WRITE16:
+        tud_msc_set_sense(lun,
+                    SCSI_SENSE_DATA_PROTECT,
+                    SCSI_ASC_WRITE_PROTECTED,
+                    SCSI_ASCQ_WRITE_PROTECTED);
+        return TUD_MSC_RET_ERROR;
+
+    case SCSI_CMD_MODE_SENSE_10:
+    {
+        scsi_mode_sense10_resp_t* resp = (scsi_mode_sense10_resp_t*)buffer;
+        memset(resp, 0, sizeof(*resp));
+        // Mode Data Length = total bytes following data_len field (sizeof(header)-2)
+        resp->data_len = __builtin_bswap16(sizeof(*resp) - 2); // XXX FIXME: use a TinyUSB macro for this
+        // Byte-3 (Device-Specific Parameter): set Write-Protect bit (0x80)
+        resp->dev_spec_params = 0x80;
+        // Block Descriptor Length = 0 (bytes 4-5 already zeroed)
+        return sizeof(*resp);
+    }
+    default:
+        // For all other commands, fallback to default (unrecognized command)
+        return -1;
+    }
 }
 
 #endif // CFG_TUD_MSC
