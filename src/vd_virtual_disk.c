@@ -338,6 +338,23 @@ static void gen_upcs_sector(uint32_t lba, void* buffer, uint32_t offset, uint32_
     }
 }
 
+/**
+ * @brief Notify the host that the virtual disk contents have changed.
+ *
+ * This function should be called whenever the contents of the virtual disk
+ * change, such as when partition contents have changed. It will trigger
+ * the host to re-read the disk contents.
+ *
+ * This is a relatively heavy operation, as it will cause the host to
+ * re-read the entire disk, so it should be used sparingly.
+ */
+
+static bool vd_virtual_disk_contents_changed_flag = false;
+
+void vd_virtual_disk_contents_changed(void) {
+    vd_virtual_disk_contents_changed_flag = true;
+}
+
 /*
  * --------------------------------------------------------------------------
  * MSC SCSI Callback Section
@@ -418,6 +435,9 @@ bool tud_msc_start_stop_cb(uint8_t lun,
 #ifndef SCSI_ASC_WRITE_PROTECTED
 #define SCSI_ASC_WRITE_PROTECTED  0x27
 #endif
+#ifndef SCSI_ASC_MEDIUM_MAY_HAVE_CHANGED
+#define SCSI_ASC_MEDIUM_MAY_HAVE_CHANGED 0x28
+#endif
 #ifndef SCSI_ASCQ_WRITE_PROTECTED
 #define SCSI_ASCQ_WRITE_PROTECTED 0x00
 #endif
@@ -486,6 +506,8 @@ int32_t tud_msc_write10_cb(uint8_t lun,
 /**
  * @brief SCSI transparent command callbacks.
  *
+ * XXX UPDATE the documentation!
+ *
  * Handles MODE SENSE (6) to report a write-protected medium.
  * Other SCSI commands use TinyUSB's default handling.
  *
@@ -501,14 +523,17 @@ int32_t tud_msc_scsi_pre_cb(uint8_t lun,
                            uint16_t bufsize)
 {
     switch (scsi_cmd[0]) {
+    /*
+     * Implement fully read-only disk semantics.
+     */
     case SCSI_CMD_INQUIRY:
     {
         // Build Inquiry response, reporting write-protected media
         scsi_inquiry_resp_t* resp = (scsi_inquiry_resp_t*)buffer;
         memset(resp, 0, sizeof(*resp));
 
-        resp->peripheral_device_type = 0;
-        resp->peripheral_qualifier   = 0;
+        // resp->peripheral_device_type = 0; // Already zeroed
+        // resp->peripheral_qualifier   = 0; // Already zeroed
         resp->is_removable           = 1;
         resp->version                = 2;
         resp->response_data_format   = 2;
@@ -526,21 +551,40 @@ int32_t tud_msc_scsi_pre_cb(uint8_t lun,
         // Return entire inquiry response size
         return sizeof(*resp);
     }
+#if 0 // Not needed, tud_msc_is_writable_cb() takes care of this
     case SCSI_CMD_MODE_SENSE_6:
     {
         // Build 4-byte Mode Parameter Header
         scsi_mode_sense6_resp_t* resp = (scsi_mode_sense6_resp_t*)buffer;
         memset(resp, 0, sizeof(*resp));
-        // Mode Data Length: number of bytes following this field (3)
         resp->data_len = sizeof(*resp) - 1;
-        // Medium Type = 0 (direct-access), already zeroed
-        // Device-Specific Parameter: set Write-Protect bit
+        // resp->medium_type = 0; // Already zeroed
         resp->write_protected = true;
-        // Block Descriptor Length = 0, already zeroed
+        // resp->block_descriptor_len = 0; // Already zeroed
         return sizeof(*resp);
     }
+#endif
+    /*
+    * Implement virtual-disk contents change notification.
+    */
+    case SCSI_CMD_TEST_UNIT_READY:
+    case SCSI_CMD_READ_CAPACITY_10:
+        if (vd_virtual_disk_contents_changed_flag) {
+            // If the virtual disk contents have changed, notify the host
+            // that it should re-read the disk.
+            // This is done by setting a Unit Attention sense code.
+            // See SPC-4 §6.7.1 for details on Unit Attention conditions.
+            tud_msc_set_sense(0,
+                SCSI_SENSE_UNIT_ATTENTION,
+                SCSI_ASC_MEDIUM_MAY_HAVE_CHANGED,
+                0x00);
+            vd_virtual_disk_contents_changed_flag = false;  // Only once
+            return TUD_MSC_RET_ERROR;      // Signal CHECK CONDITION
+        }
+        // Fallback to the default handler
+        break;
     }
-    return -1; // Fallback to default handling
+    return TUD_MSC_RET_CALL_DEFAULT; // Fallback to default handling
 }
 
 int32_t tud_msc_scsi_cb(uint8_t lun,
@@ -582,6 +626,10 @@ int32_t tud_msc_scsi_cb(uint8_t lun,
         // For all other commands, fallback to default (unrecognized command)
         return -1;
     }
+}
+
+bool tud_msc_is_writable_cb(uint8_t lun) {
+    return false; // Always read-only
 }
 
 #endif // CFG_TUD_MSC
