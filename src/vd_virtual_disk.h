@@ -2,7 +2,14 @@
 #include <stdint.h>
 
 // ---------------------------------------------------------------
-// Functions to provide RP2350 memory
+// Virtual Disk Read Callback
+// ---------------------------------------------------------------
+
+extern int32_t vd_virtual_disk_read(uint32_t lba, uint32_t offset, void* buffer, uint32_t bufsize);
+
+// ---------------------------------------------------------------
+// Functions to provide RP2350 memory files
+// XXX FIXME: Move to rp2350.h
 // ---------------------------------------------------------------
 
 extern void vd_return_bootrom_sector(uint32_t lba, void* buffer, uint32_t offset, uint32_t bufsize);
