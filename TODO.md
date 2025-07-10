@@ -14,9 +14,8 @@
 
 # Features
 
-* Add support for SRAM and ROM files
-* Add support for runtime generated file directory entries
-* Add support for Pico BootROM partitions
+* Add support for removable USB MSC disk, see https://chatgpt.com/share/686cdd19-a8f0-8005-a8c5-52215083cc1b
+* Add teste support and instructions for including into another project
 
 * Move the PicoVD tool into examples/
 
@@ -30,7 +29,7 @@
 # Test cases to be added
 
 * Verify allocation bitmap matches actual used clusters
-* Verify cluster ranges for metadata don’t overlap
+* Verify cluster ranges for metadata don't overlap
 
 
 
