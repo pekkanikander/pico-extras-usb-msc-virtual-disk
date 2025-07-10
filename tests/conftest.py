@@ -1,8 +1,16 @@
 # conftest.py - pytest configuration for exFAT tests
 
+USB_VENDOR_ID    = 0x2E8A
+USB_PRODUCT_ID   = 0x0009
+USB_MSC_IFACE    = 3
+
 import os
 import sys
 import pytest
+import platform
+import subprocess
+import usb.core, usb.util
+
 from device_finder import find_msc_disk
 from exfat_utils import raw_sector_reader, find_directory_entry
 
@@ -16,6 +24,24 @@ def pytest_addoption(parser):
         default=None,
         help="Raw block device to read exFAT image from (e.g. /dev/sdX or /dev/rdiskY)."
     )
+
+def find_msc_usb_device():
+    dev = usb.core.find(idVendor=USB_VENDOR_ID, idProduct=USB_PRODUCT_ID)
+    assert dev, "Pico not plugged in"
+    dev.set_configuration()
+    return dev
+
+@pytest.fixture
+def msc_usb_dev_device():
+    if platform.system() == "Darwin":
+        pytest.skip("macOS won’t relinquish the MSC interface to libusb—run these tests on Linux")
+    dev = find_msc_usb_device()
+
+    # On Linux, this also unmounts the FS
+    if platform.system() == "Linux" and dev.is_kernel_driver_active(MSC_IFACE):
+        dev.detach_kernel_driver(USB_MSC_IFACE)
+
+    return dev
 
 @pytest.fixture
 def device(request):
@@ -72,8 +98,6 @@ def bootsector_data(device, read_raw_sector):
         "No boot sector source found; specify --device or TEST_EXFAT_DEVICE, "
         "or generate tests/bootsector.bin"
     )
-
-
 
 
 @pytest.fixture
