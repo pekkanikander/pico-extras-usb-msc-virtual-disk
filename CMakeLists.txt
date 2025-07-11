@@ -68,8 +68,6 @@ target_link_libraries(
     picovd-tool
     pico_stdlib
     pico_stdio_usb
-    tinyusb_device
-    tinyusb_board
     picovd
     )
 
