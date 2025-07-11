@@ -23,7 +23,7 @@
 // Directory set SetChecksum computation
 /// See Microsoft spec §6.3.3 “SetChecksum Field” (Figure 2)
 // ---------------------------------------------------------------------------
-static uint16_t exfat_dirs_compute_setchecksum(const uint8_t *entries, size_t len) {
+uint16_t exfat_dirs_compute_setchecksum(const uint8_t *entries, size_t len) {
     uint16_t sum = 0;
     for (int i = 0; i < len; i++) {
         if (i == 2 || i == 3)
@@ -161,7 +161,7 @@ void exfat_generate_root_dir_fixed_sector(uint32_t __unused lba, void* buffer, u
 // ---------------------------------------------------------------------------
 
 // Buffer for a dynamically generated entry set. Cleared on each call.
-static exfat_root_dir_entries_dynamic_file_t des;
+static exfat_root_dir_entries_dynamic_file_t directory_entry_set_buffer;
 
 #ifndef __INTELLISENSE__
 _Static_assert(sizeof(exfat_root_dir_entries_dynamic_file_t) % CFG_TUD_MSC_EP_BUFSIZE == 0,
@@ -171,7 +171,7 @@ _Static_assert(sizeof(exfat_root_dir_entries_dynamic_file_t) % CFG_TUD_MSC_EP_BU
 // ---------------------------------------------------------------------------
 // Helper: assemble a 512‑byte root‑dir slot for partition `part_idx`
 // ---------------------------------------------------------------------------
-static bool build_partition_entry_set(uint32_t part_idx) {
+static bool build_rp2350_partition_entry_set(uint32_t part_idx, exfat_root_dir_entries_dynamic_file_t *des) {
     // 1. Query BootROM for LOCATION/FLAGS and NAME of this single partition.
     enum {
         PT_LOCATION_AND_FLAGS = 0x0010,
@@ -204,24 +204,21 @@ static bool build_partition_entry_set(uint32_t part_idx) {
     // NAME field
     uint8_t  name_len   = (*(uint8_t *)p) & 0x7F;
     const uint8_t *name_bytes = ((const uint8_t *)p) + 1;     // ASCII/UTF‑8
+    uint8_t n_fname = (uint8_t)((name_len + 14) / 15);        // ceil(len/15) XXX FIXME
 
-    // ----------- reset destination struct -----------
-    memset(&des, 0, sizeof(des));
-    des.file_directory.entry_type  = exfat_entry_type_file_directory;
-    des.file_directory.file_attributes = EXFAT_FILE_ATTR_READ_ONLY;
-    des.stream_extension.entry_type    = exfat_entry_type_stream_extension;
-    des.stream_extension.secondary_flags = 0x03;   // always 'valid data length' + 'no FAT'
+    memset(des, 0, sizeof(*des));
 
-    // (1) File Directory entry
-    uint8_t n_fname = (uint8_t)((name_len + 14) / 15);        // ceil(len/15)
-    des.file_directory.secondary_count = 1 /* XXX FIXME */ + n_fname;
+    des->file_directory.entry_type  = exfat_entry_type_file_directory;
+    des->file_directory.file_attributes = EXFAT_FILE_ATTR_READ_ONLY;
+    des->file_directory.secondary_count = 1 /* XXX FIXME */ + n_fname;
 
-    // (2) Stream Extension entry
-    des.stream_extension.name_length       = name_len;
-    des.stream_extension.valid_data_length = (uint64_t)flash_size;
-    des.stream_extension.data_length       = (uint64_t)flash_size;
+    des->stream_extension.entry_type    = exfat_entry_type_stream_extension;
+    des->stream_extension.secondary_flags = 0x03;   // always 'valid data length' + 'no FAT'
+    des->stream_extension.name_length       = name_len;
+    des->stream_extension.valid_data_length = (uint64_t)flash_size;
+    des->stream_extension.data_length       = (uint64_t)flash_size;
     // First cluster calculation: clusters start at 2
-    des.stream_extension.first_cluster = flash_size? flash_page + PICOVD_FLASH_START_CLUSTER : 0;
+    des->stream_extension.first_cluster = flash_size? flash_page + PICOVD_FLASH_START_CLUSTER : 0;
 
     // Expand the name to UTF‑16LE
     assert(name_len <= 127);
@@ -230,12 +227,12 @@ static bool build_partition_entry_set(uint32_t part_idx) {
         file_name[i] = name_bytes[i]; // UTF-8 to UTF-16LE
     }
 
-    des.stream_extension.name_hash
+    des->stream_extension.name_hash
         = exfat_dirs_compute_name_hash(file_name, name_len);
 
     // (3) File‑Name secondary entries (UTF‑16LE, padded with 0x0000)
     for (uint8_t i = 0; i < n_fname; i++) {
-        exfat_file_name_dir_entry_t *fn = &des.file_name[i];
+        exfat_file_name_dir_entry_t *fn = &des->file_name[i];
         fn->entry_type = exfat_entry_type_file_name;
         uint8_t copy = (uint8_t)((name_len > 15) ? 15 : name_len);
         for (uint8_t j = 0; j < copy; ++j) {
@@ -245,23 +242,42 @@ static bool build_partition_entry_set(uint32_t part_idx) {
     }
 
     // Mark extra entries as unused
-    for (uint8_t i = n_fname; i < sizeof(des.file_name)/sizeof(des.file_name[0]); i++) {
-        des.file_name[i].entry_type = exfat_entry_type_unused;
+    for (uint8_t i = n_fname; i < sizeof(des->file_name)/sizeof(des->file_name[0]); i++) {
+        des->file_name[i].entry_type = exfat_entry_type_unused;
     }
 
     // (4) Compute SetChecksum and store it (bytes 2–3 of primary entry)
     uint16_t checksum = exfat_dirs_compute_setchecksum(
                             (const uint8_t *)&des,
                             (size_t)((2 + n_fname) * 32)); // Is this right?
-    des.file_directory.set_checksum = checksum;
+    des->file_directory.set_checksum = checksum;
 
     return true;
 }
 
-static int32_t  current_partition_idx = -1;  ///< partition index currently in slot_buf
+typedef bool (*build_partition_entry_set_t)(uint32_t slot_idx, exfat_root_dir_entries_dynamic_file_t  *des);
+
+static build_partition_entry_set_t build_partition_entry_set_table[] = {
+#if PICOVD_BOOTROM_PARTITIONS_ENABLED
+    build_rp2350_partition_entry_set, // Slot 0
+    build_rp2350_partition_entry_set, // Slot 1
+    build_rp2350_partition_entry_set, // Slot 2
+    build_rp2350_partition_entry_set, // Slot 3
+    build_rp2350_partition_entry_set, // Slot 4
+    build_rp2350_partition_entry_set, // Slot 5
+    build_rp2350_partition_entry_set, // Slot 6
+    build_rp2350_partition_entry_set, // Slot 7
+#endif
+#if PICOVD_CHANGING_FILE_ENABLED
+    files_changing_build_file_partition_entry_set, // Slot agnostic
+#endif
+    // Add more slots here if needed, e.g. for other partitions
+};
+
+static int32_t  current_slot_idx = -1;  ///< partition index currently in slot_buf
 
 // ---------------------------------------------------------------------------
-// Generate a slice of a *dynamic* root‑directory sector (partition slots)
+// Generate a slice of a *dynamic* root-directory sector
 // ---------------------------------------------------------------------------
 void exfat_generate_root_dir_dynamic_sector(uint32_t lba, void* buffer,
                                             uint32_t offset, uint32_t bufsize) {
@@ -275,19 +291,19 @@ void exfat_generate_root_dir_dynamic_sector(uint32_t lba, void* buffer,
     uint32_t slot_idx = lba - EXFAT_ROOT_DIR_START_LBA - 1u;
 
     // (1) build / fetch cached slot
-    if (slot_idx < 8 /* XXX FIXME */) {
-        if (slot_idx != current_partition_idx) {
-            bool ok = build_partition_entry_set(slot_idx);
-            current_partition_idx = ok? slot_idx: -1;
+    if (slot_idx < sizeof(build_partition_entry_set_table)/sizeof(build_partition_entry_set_table[0])) {
+        if (slot_idx != current_slot_idx) {
+            bool ok = build_partition_entry_set_table[slot_idx](slot_idx, &directory_entry_set_buffer);
+            current_slot_idx = ok? slot_idx: -1;
         }
     } else {
-        current_partition_idx = -1; // No valid partition entry
+        current_slot_idx = -1; // No valid partition entry
     }
 
     // (2) copy the requested slice. XXX HACK: We assume maybe too much,
     // but we do static_assert that the entry set is a multiple of CFG_TUD_MSC_EP_BUFSIZE bytes.
-    if (current_partition_idx >= 0 && offset < sizeof(des)) {
-        memcpy(buffer, ((uint8_t *)&des) + offset, bufsize);
+    if (current_slot_idx >= 0 && offset < sizeof(directory_entry_set_buffer)) {
+        memcpy(buffer, ((uint8_t *)&directory_entry_set_buffer) + offset, bufsize);
     } else {
         memset(buffer, exfat_entry_type_unused, bufsize); // Fill with unused entries
     }

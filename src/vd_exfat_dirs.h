@@ -178,7 +178,7 @@ typedef struct __packed exfat_root_dir_entries_dynamic_file {
 } exfat_root_dir_entries_dynamic_file_t;
 STATIC_ASSERT_PACKED(sizeof(exfat_root_dir_entries_dynamic_file_t) == 12 * 32,
     "Dynamic exFAT file/directory entry set length must be == 12 * 32 bytes");
-static_assert(sizeof(exfat_root_dir_entries_dynamic_file_t) % CFG_TUD_MSC_EP_BUFSIZE == 0,
+STATIC_ASSERT_PACKED(sizeof(exfat_root_dir_entries_dynamic_file_t) % CFG_TUD_MSC_EP_BUFSIZE == 0,
     "Dynamic exFAT file/directory entry set length must be a multiple of MSC EP buffer size");
 
 #ifdef __cplusplus
@@ -202,6 +202,26 @@ static constexpr inline uint16_t exfat_dirs_compute_name_hash(const char16_t *na
     return hash;
 }
 
+/// Create an exFAT 32-bit timestamp (Table 29 §7.4.8)
+/// year: full year (>=1980), month: 1-12, day:1-31,
+/// hour:0-23, minute:0-59, second:0-59 (rounded down to even).
+static constexpr inline exfat_timestamp_t exfat_make_timestamp(
+    unsigned year,
+    unsigned month,
+    unsigned day,
+    unsigned hour,
+    unsigned minute,
+    unsigned second) {
+    return ((year - 1980)   & 0x7F) << 25
+         | (month           & 0x0F) << 21
+         | (day             & 0x1F) << 16
+         | (hour            & 0x1F) << 11
+         | (minute          & 0x3F) <<  5
+         | ((second / 2)    & 0x1F) <<  0;
+}
+
+
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -217,6 +237,10 @@ extern const exfat_root_dir_entries_fixed_file_t exfat_root_dir_bootrom_file_dat
 
 // Directory entries for FLASH.BIN, pre-constructed
 extern const exfat_root_dir_entries_fixed_file_t exfat_root_dir_flash_file_data;
+
+extern uint16_t exfat_dirs_compute_setchecksum(const uint8_t *entries, size_t len);
+
+extern bool files_changing_build_file_partition_entry_set(uint32_t slot_idx, exfat_root_dir_entries_dynamic_file_t *des);
 
 #ifdef __cplusplus
 }

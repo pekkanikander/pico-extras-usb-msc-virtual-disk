@@ -78,8 +78,12 @@ static const lba_region_t lba_regions[] = {
     { gen_zero_sector, EXFAT_ROOT_DIR_START_LBA, },
     // §7.4 Root Directory sectors, from vd_exfat_directory.c
     { exfat_generate_root_dir_fixed_sector,   EXFAT_ROOT_DIR_START_LBA + 1, },
-#if PICOVD_BOOTROM_PARTITIONS_ENABLED
     { exfat_generate_root_dir_dynamic_sector, EXFAT_ROOT_DIR_START_LBA + EXFAT_ROOT_DIR_LENGTH_SECTORS },
+
+#if PICOVD_CHANGING_FILE_ENABLED
+    // Changing File contents
+    { gen_zero_sector, PICOVD_CHANGING_FILE_START_LBA, },
+    { vd_return_changing_file_sector, PICOVD_CHANGING_FILE_START_LBA + 1, },
 #endif
 
 #if PICOVD_BOOTROM_ENABLED

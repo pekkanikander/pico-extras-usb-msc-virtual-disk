@@ -44,4 +44,13 @@
 #define PICOVD_BOOTROM_PARTITIONS_FILE_BASE u"PARTx.BIN"
 #define PICOVD_BOOTROM_PARTITIONS_FILE_NAME_LEN 8u
 
+// Add support for a constantly changing file, to test the host's ability to re-read the disk contents
+// This will enable the generation of a file named "CHANGING.TXt" in the exFAT filesystem.
+#define PICOVD_CHANGING_FILE_ENABLED    (1)
+#define PICOVD_CHANGING_FILE_NAME       u"CHANGING.TXT"
+#define PICOVD_CHANGING_FILE_NAME_LEN   12u
+#define PICOVD_CHANGING_FILE_SIZE_BYTES 512 // XXX FIXME
+#define PICOVD_CHANGING_FILE_START_CLUSTER (0xD000) // Within the free cluster range
+#define PICOVD_CHANGING_FILE_START_LBA  EXFAT_CLUSTER_TO_LBA(PICOVD_CHANGING_FILE_START_CLUSTER)
+
 #endif
