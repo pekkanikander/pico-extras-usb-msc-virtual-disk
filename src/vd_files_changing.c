@@ -47,10 +47,25 @@ bool files_changing_build_file_partition_entry_set(uint32_t slot_idx __unused, e
     uint32_t mins  = (total_s / 60) % 60;
     uint32_t secs  = total_s % 60;
 
-    des->file_directory.creat_time = 0; // XXX FIXME
-    des->file_directory.last_acc_time = 
-    des->file_directory.last_mod_time 
-      = exfat_make_timestamp(2025, 1, 1, hours, mins, secs);
+    // Set all timestamps to Jan 1, 2025 at current uptime time-of-day
+    uint32_t timestamp = exfat_make_timestamp(2025, 1, 1, hours, mins, secs);
+    des->file_directory.creat_time       = timestamp;
+    des->file_directory.last_mod_time    = timestamp;
+    des->file_directory.last_acc_time    = timestamp;
+
+#if 1
+    uint8_t *bt = (uint8_t*)&des->file_directory.last_mod_time;
+    printf("RAW TS BYTES: %02X %02X %02X %02X\n",
+        bt[0], bt[1], bt[2], bt[3]);
+#endif
+
+    // No 10 ms increments
+    des->file_directory.creat_time_ms    = 0;
+    des->file_directory.last_mod_time_ms = 0;
+    // Mark UTC offset valid (0 minutes)
+    des->file_directory.creat_time_off    = exfat_utc_offset_UTC;
+    des->file_directory.last_mod_time_off = exfat_utc_offset_UTC;
+    des->file_directory.last_acc_time_off = exfat_utc_offset_UTC;
 
     // (2) Prepare the stream extension entry
     des->stream_extension.entry_type = exfat_entry_type_stream_extension;
