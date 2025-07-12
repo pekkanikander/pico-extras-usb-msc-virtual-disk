@@ -21,7 +21,7 @@ if (EXISTS ${picoVscode})
     include(${picoVscode})
 endif()
 # ====================================================================================
-set(PICO_BOARD pico2 CACHE STRING "Board type") 
+set(PICO_BOARD pico2 CACHE STRING "Board type")
 
 # Tell Pico SDK to use our slightly patched lib/tinyusb submodule,
 # instead of its bundled copy
@@ -37,13 +37,13 @@ pico_sdk_init()
 
 add_subdirectory(src)
 
-add_executable(picovd-tool 
+add_executable(picovd-tool
         picovd.c
         usb_descriptors.c
         )
 
 pico_set_program_name(picovd-tool "picovd-tool")
-pico_set_program_version(picovd-tool "0.3.1")
+pico_set_program_version(picovd-tool "0.3.2")
 
 # picovd-tool is meant to run from RAM
 pico_set_binary_type(picovd-tool no_flash)
