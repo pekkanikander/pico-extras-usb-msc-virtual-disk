@@ -80,11 +80,5 @@ bool files_changing_build_file_partition_entry_set(uint32_t slot_idx __unused, e
         des->file_name[i].entry_type = exfat_entry_type_unused;
     }
 
-    // (4) Compute SetChecksum and store it (bytes 2–3 of primary entry)
-    uint16_t checksum = exfat_dirs_compute_setchecksum(
-                            (const uint8_t *)des,
-                            (size_t)(3 * 32)); // XXX FIXME
-    des->file_directory.set_checksum = checksum;
-
     return true;
 }

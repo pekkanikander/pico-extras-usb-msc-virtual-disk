@@ -185,7 +185,7 @@ static bool build_rp2350_partition_entry_set(uint32_t part_idx, exfat_root_dir_e
                      PT_NAME |
                      (part_idx << 24);   // partition# in top 8 bits per spec
 
-    int words 
+    int words
     = rom_get_partition_table_info(pt_buf,
         (uint32_t)(sizeof(pt_buf)/sizeof(pt_buf[0])),
         flags);
@@ -246,12 +246,6 @@ static bool build_rp2350_partition_entry_set(uint32_t part_idx, exfat_root_dir_e
         des->file_name[i].entry_type = exfat_entry_type_unused;
     }
 
-    // (4) Compute SetChecksum and store it (bytes 2–3 of primary entry)
-    uint16_t checksum = exfat_dirs_compute_setchecksum(
-                            (const uint8_t *)&des,
-                            (size_t)((2 + n_fname) * 32)); // Is this right?
-    des->file_directory.set_checksum = checksum;
-
     return true;
 }
 
@@ -294,7 +288,17 @@ void exfat_generate_root_dir_dynamic_sector(uint32_t lba, void* buffer,
     if (slot_idx < sizeof(build_partition_entry_set_table)/sizeof(build_partition_entry_set_table[0])) {
         if (slot_idx != current_slot_idx) {
             bool ok = build_partition_entry_set_table[slot_idx](slot_idx, &directory_entry_set_buffer);
-            current_slot_idx = ok? slot_idx: -1;
+            if (ok) {
+                //  Compute SetChecksum and store it (bytes 2–3 of primary entry)
+                // XXX FUTURE: Considern caching these and recomputing only when needed.
+                const uint16_t checksum = exfat_dirs_compute_setchecksum(
+                    (const uint8_t *)&directory_entry_set_buffer,
+                    (size_t)((1 + directory_entry_set_buffer.file_directory.secondary_count) * 32));
+                directory_entry_set_buffer.file_directory.set_checksum = checksum;
+                current_slot_idx = slot_idx;
+            } else {
+                current_slot_idx = -1;
+            }
         }
     } else {
         current_slot_idx = -1; // No valid partition entry
