@@ -1,4 +1,5 @@
 build
 .DS_Store
 tests/__pycache__
+tools/ncat
 .pytest_cache/
