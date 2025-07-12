@@ -2,12 +2,6 @@
     "cmake.configureOnOpen": false,
     "cmake.configureOnEdit": true,
     "cmake.automaticReconfigure": true,
-    "cmake.configureSettings": {
-        "PICO_EXTRAS_PATH": "${workspaceFolder}/../pico-extras"
-    },
-    "cmake.buildEnvironment": {
-        "PICO_EXTRAS_PATH": "${workspaceFolder}/../pico-extras"
-    },
     "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
     "cmake.generator": "Ninja",
     "cmake.cmakePath": "${userHome}/.pico-sdk/cmake/v3.31.5/bin/cmake",
