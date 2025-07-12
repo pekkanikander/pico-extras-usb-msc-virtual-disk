@@ -53,12 +53,6 @@ bool files_changing_build_file_partition_entry_set(uint32_t slot_idx __unused, e
     des->file_directory.last_mod_time    = timestamp;
     des->file_directory.last_acc_time    = timestamp;
 
-#if 1
-    uint8_t *bt = (uint8_t*)&des->file_directory.last_mod_time;
-    printf("RAW TS BYTES: %02X %02X %02X %02X\n",
-        bt[0], bt[1], bt[2], bt[3]);
-#endif
-
     // No 10 ms increments
     des->file_directory.creat_time_ms    = 0;
     des->file_directory.last_mod_time_ms = 0;

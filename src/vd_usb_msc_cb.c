@@ -237,19 +237,6 @@ int32_t tud_msc_scsi_pre_cb(uint8_t lun,
         // Return entire inquiry response size
         return sizeof(*resp);
     }
-#if 0 // Not needed, tud_msc_is_writable_cb() takes care of this
-    case SCSI_CMD_MODE_SENSE_6:
-    {
-        // Build 4-byte Mode Parameter Header
-        scsi_mode_sense6_resp_t* resp = (scsi_mode_sense6_resp_t*)buffer;
-        memset(resp, 0, sizeof(*resp));
-        resp->data_len = sizeof(*resp) - 1;
-        // resp->medium_type = 0; // Already zeroed
-        resp->write_protected = true;
-        // resp->block_descriptor_len = 0; // Already zeroed
-        return sizeof(*resp);
-    }
-#endif
     /*
     * Implement virtual-disk contents change notification.
     */
