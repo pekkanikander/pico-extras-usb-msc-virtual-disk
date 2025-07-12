@@ -75,9 +75,24 @@ _Static_assert(sizeof(scsi_mode_sense10_resp_t) == 8, "SCSI Mode Sense (10) resp
 
 static bool vd_virtual_disk_contents_changed_flag = false;
 
-void vd_virtual_disk_contents_changed(void) {
+void vd_virtual_disk_contents_changed(bool hard_reset) {
     vd_virtual_disk_contents_changed_flag = true;
+
+    // Drop the USB connection to notify the host
+    // that the disk contents have changed.
+    // This will cause the host to re-enumerate the device.
+    // The host will then re-read the disk contents.
+    // This is necessary because the host may cache the disk contents,
+    // and we need to ensure it sees the new contents.
+    // This is a workaround for the fact that the host may not
+    // automatically re-read the disk contents when they change.
+    if (hard_reset) {
+      tud_disconnect();      // remove D+ pull-up
+      sleep_ms(3);          // host will see device vanish
+      tud_connect();         // re-enumerate as a brand-new device
+    }
 }
+
 
 /*
  * --------------------------------------------------------------------------

@@ -25,4 +25,4 @@ extern void vd_return_changing_file_sector(uint32_t lba, void* buffer, uint32_t 
 // Indicate that the virtual disk contents have changed,
 // forcing the host to re-read the disk.
 // ---------------------------------------------------------------
-extern void vd_virtual_disk_contents_changed(void);
+extern void vd_virtual_disk_contents_changed(bool hard_reset);
