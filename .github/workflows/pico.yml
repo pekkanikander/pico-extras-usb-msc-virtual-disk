@@ -1,0 +1,38 @@
+name: CMake
+permissions:
+  contents: read
+  packages: read
+on:
+  workflow_dispatch
+
+env:
+  # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
+  BUILD_TYPE: Release
+
+jobs:
+  build:
+    runs-on: [ubuntu-latest]
+    container:
+      # Use the Docker image as published in your GitHub Container Registry
+      image: ghcr.io/${{ github.repository }}/ubuntu-24.04-with-tools:latest
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+      with:
+        submodules: true
+
+    - name: Configure CMake
+      run: cmake -S . -B build
+
+    - name: Build
+      working-directory: ${{github.workspace}}/build
+      shell: bash
+      # Execute the build.  You can specify a specific target with "--target <NAME>"
+      run: cmake --build . --config $BUILD_TYPE --parallel $(nproc)
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: firmware
+        path: build/*.uf2
