@@ -5,6 +5,7 @@
 # Known minor bugs
 
 * Fix bitmap so that macOS fsck is happy.
+* Remove stray invalid file names so that macOS fsck is happy.
 * Check upcase table / upcase table test case. Test case fails.
 * Go carefully through TinyUSB MSC callback layer. Currently hacky and maybe faulty for some SCSI commands.
   * in tud_msc_scsi_cb don't return error on default, maybe we should?
