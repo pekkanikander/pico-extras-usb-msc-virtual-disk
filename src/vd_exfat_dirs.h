@@ -97,6 +97,7 @@ typedef enum  {
     EXFAT_FILE_ATTR_HIDDEN     = 0x0002,  ///< hidden file
     EXFAT_FILE_ATTR_SYSTEM     = 0x0004,  ///< system file
     EXFAT_FILE_ATTR_ARCHIVE    = 0x0020,  ///< archive bit
+    EXFAT_FILE_ATTR_MAX        = 0xFFFF,  ///< force 2 byte value
 } exfat_file_attr_t;
 
 /// exFAT timestamp field (32 bits; see Table 29 §7.4.8)
@@ -105,7 +106,7 @@ typedef uint32_t exfat_timestamp_t;
 /// §7.4.9 “10msIncrement Fields"
 /// These fields are not used in this read-only volume (always zero).
 
-/// §7.4.10 “UtcOffset Fields" (signed 15-minute increments, Table 31)  
+/// §7.4.10 “UtcOffset Fields" (signed 15-minute increments, Table 31)
 /// We only support UTC (offset = 0 minutes).
 typedef enum {
     exfat_utc_offset_UTC = 0x80  ///< OffsetValid | Coordinated Universal Time
@@ -117,18 +118,17 @@ typedef struct __packed {
     exfat_entry_type_t   entry_type;        ///< Entry type (0x85)
     uint8_t              secondary_count;   ///< Number of secondary entries
     uint16_t             set_checksum;      ///< Checksum of the set of entries
-    exfat_file_attr_t    file_attributes;   ///< File attributes 
-    uint8_t              reserved1[2];      ///< Reserved; must be zero 
+    uint16_t             file_attributes;   ///< File attributes
+    uint8_t              reserved1[2];      ///< Reserved; must be zero
     exfat_timestamp_t    creat_time;        ///< Creation time
     exfat_timestamp_t    last_mod_time;     ///< Last modification time
     exfat_timestamp_t    last_acc_time;     ///< Last access time
     uint8_t              creat_time_ms;     ///< Creation time 10ms increments
     uint8_t              last_mod_time_ms;  ///< Last modification time 10ms increments
-    uint8_t              last_acc_time_ms;  ///< Last access 10ms increments
     exfat_utc_offset_t   creat_time_off;    ///< Creation time UTC offset
     exfat_utc_offset_t   last_mod_time_off; ///< Last modification time UTC offset
     exfat_utc_offset_t   last_acc_time_off; ///< Last access time UTC offset
-    uint8_t              reserved2[7];      ///< Reserved; must be zero 
+    uint8_t              reserved2[7];      ///< Reserved; must be zero
 } exfat_file_directory_dir_entry_t;
 STATIC_ASSERT_PACKED(sizeof(exfat_file_directory_dir_entry_t) == 32,
     "File Directory exFAT directory entry must be 32 bytes");
