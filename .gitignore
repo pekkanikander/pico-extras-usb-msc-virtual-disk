@@ -3,3 +3,4 @@ build
 tests/__pycache__
 tools/ncat
 .pytest_cache/
+.github/token
