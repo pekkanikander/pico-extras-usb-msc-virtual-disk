@@ -1,9 +1,9 @@
 name: CMake
-permissions:
-  contents: read
-  packages: read
 on:
-  workflow_dispatch
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
 
 env:
   # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
@@ -36,3 +36,34 @@ jobs:
       with:
         name: firmware
         path: build/*.uf2
+
+  release:
+    name: Create Release (if tag pushed)
+    permissions:
+      contents: write
+      packages: read
+    # This job runs only when the ref is a tag
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: [ubuntu-latest]
+    container:
+      image: ghcr.io/${{ github.repository }}/ubuntu-24.04-with-tools:latest
+
+    steps:
+      # Download the firmware which were previously built
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: firmware
+          path: artefacts
+      # Create a release and upload it as a release to this repository
+      - name: Create a GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          allowUpdates: true
+          draft: true
+          updateOnlyUnreleased: true
+          tag: ${{ github.ref_name }}
+          # Attach the files as part of the release.
+          artifacts: |
+            artefacts/*.uf2
