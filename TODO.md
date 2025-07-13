@@ -36,3 +36,22 @@
 
 * Verify allocation bitmap matches actual used clusters
 * Verify cluster ranges for metadata don't overlap
+
+# HIL testing ideas
+
+- **TinyHCI (tinygo-org/tinyhci):** HIL integration via GitHub events running
+tests locally on actual RP2040 hardware
+- listens to GitHub and executes tests with a local runner:
+https://github.com/tinygo-org/tinyhci
+
+- **TinyTapeout/tt-micropython-firmware:** Uses Cocotb framework to run the same
+test harness on both Wokwi simulator and physical RP2040 hardware:
+https://github.com/TinyTapeout/tt-micropython-firmware
+
+- **Wokwi RP2040 JS Emulator:** Browser-based simulator for RP2040 firmware;
+useful for early smoke tests but requires backporting BootROM partition support for RP2350:
+https://github.com/wokwi/rp2040js
+
+- **rp2040-pio-emulator:** Pure-software PIO peripheral emulator for unit-testing
+PIO programs without hardware:
+https://github.com/NathanY3G/rp2040-pio-emulator
