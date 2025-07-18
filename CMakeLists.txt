@@ -51,7 +51,7 @@ pico_set_binary_type(picovd-tool no_flash)
 # Enable stdio output over USB
 pico_enable_stdio_usb(picovd-tool 1)
 
-# Include picotool internface
+# Include RP2350 picotool vendor interface
 target_compile_definitions(picovd-tool
   PRIVATE
     PICO_STDIO_USB_ENABLE_RESET_VIA_VENDOR_INTERFACE=1
@@ -63,7 +63,6 @@ target_sources(picovd-tool PRIVATE
     ${PICO_SDK_PATH}/src/rp2_common/pico_stdio_usb/reset_interface.c
 )
 
-# Add the standard library to the build
 target_link_libraries(
     picovd-tool
     pico_stdlib

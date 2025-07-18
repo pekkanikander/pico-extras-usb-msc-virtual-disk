@@ -12,8 +12,7 @@ target_sources(picovd INTERFACE
 
 target_include_directories(picovd INTERFACE ${CMAKE_CURRENT_LIST_DIR})
 
-target_link_libraries(picovd INTERFACE 
-    tinyusb_device
+target_link_libraries(picovd INTERFACE
     tinyusb_device
     tinyusb_board
     pico_time
