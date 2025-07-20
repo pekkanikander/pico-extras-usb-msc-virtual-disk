@@ -359,3 +359,9 @@ int32_t vd_virtual_disk_read(uint32_t lba,
     memset(buffer, 0, bufsize);
     return bufsize;
 }
+
+int vd_add_file(const vd_file_t* file) {
+    // XXX FIXME: implement LBA region table update
+    vd_exfat_dir_add_file(file);
+    return 0;
+}

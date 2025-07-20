@@ -203,6 +203,7 @@ static constexpr inline exfat_timestamp_t exfat_make_timestamp(
     unsigned hour,
     unsigned minute,
     unsigned second) {
+    if (year < 1980) year = 1980;
     return ((year - 1980)   & 0x7F) << 25
          | (month           & 0x0F) << 21
          | (day             & 0x1F) << 16
@@ -233,8 +234,6 @@ extern const exfat_root_dir_entries_fixed_file_t exfat_root_dir_bootrom_file_dat
 extern const exfat_root_dir_entries_fixed_file_t exfat_root_dir_flash_file_data;
 
 extern uint16_t exfat_dirs_compute_setchecksum(const uint8_t *entries, size_t len);
-
-extern bool files_changing_build_file_partition_entry_set(uint32_t slot_idx, exfat_root_dir_entries_dynamic_file_t *des);
 
 #ifdef __cplusplus
 }
