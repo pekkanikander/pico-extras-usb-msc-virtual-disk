@@ -36,14 +36,14 @@ typedef struct {
     uint32_t        next_lba; // Next LBA after this region
 } lba_region_t;
 
-static void gen_boot_sector(uint32_t lba, void* buffer, uint32_t offset, uint32_t bufsize);
-static void gen_extb_sector(uint32_t lba, void* buffer, uint32_t offset, uint32_t bufsize);
-static void gen_zero_sector(uint32_t lba, void* buffer, uint32_t offset, uint32_t bufsize);
-static void gen_cksm_sector(uint32_t lba, void* buffer, uint32_t offset, uint32_t bufsize);
-static void gen_fat0_sector(uint32_t lba, void* buffer, uint32_t offset, uint32_t bufsize);
-static void gen_ones_sector(uint32_t lba, void* buffer, uint32_t offset, uint32_t bufsize);
-static void gen_upcs_sector(uint32_t lba, void* buffer, uint32_t offset, uint32_t bufsize);
-static void gen_dirs_sector(uint32_t lba, void* buffer, uint32_t offset, uint32_t bufsize);
+static void gen_boot_sector(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
+static void gen_extb_sector(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
+static void gen_zero_sector(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
+static void gen_cksm_sector(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
+static void gen_fat0_sector(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
+static void gen_ones_sector(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
+static void gen_upcs_sector(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
+static void gen_dirs_sector(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
 
 // Region table: each entry defines a region of the virtual disk
 static const lba_region_t lba_regions[] = {
@@ -85,25 +85,25 @@ static const lba_region_t lba_regions[] = {
 #if PICOVD_CHANGING_FILE_ENABLED
     // Changing File contents
     { gen_zero_sector, PICOVD_CHANGING_FILE_START_LBA, },
-    { vd_return_changing_file_sector, PICOVD_CHANGING_FILE_START_LBA + 1, },
+    { vd_file_sector_get_changing_file, PICOVD_CHANGING_FILE_START_LBA + 1, },
 #endif
 
 #if PICOVD_BOOTROM_ENABLED
     // BOOTROM.BIN file, from vd_rp2350.c
     { gen_zero_sector, PICOVD_BOOTROM_START_LBA, },
-    { vd_return_bootrom_sector, PICOVD_BOOTROM_START_LBA + PICOVD_BOOTROM_SIZE_BYTES / EXFAT_BYTES_PER_SECTOR, },
+    { vd_file_sector_get_bootrom, PICOVD_BOOTROM_START_LBA + PICOVD_BOOTROM_SIZE_BYTES / EXFAT_BYTES_PER_SECTOR, },
 #endif
 
 #if PICOVD_FLASH_ENABLED
     // FLASH.BIN file, from vd_rp2350.c
     { gen_zero_sector, PICOVD_FLASH_START_LBA, },
-    { vd_return_flash_sector, PICOVD_FLASH_START_LBA + PICOVD_FLASH_SIZE_BYTES / EXFAT_BYTES_PER_SECTOR, },
+    { vd_file_sector_get_flash, PICOVD_FLASH_START_LBA + PICOVD_FLASH_SIZE_BYTES / EXFAT_BYTES_PER_SECTOR, },
 #endif
 
 #if PICOVD_SRAM_ENABLED
     // SRAM.BIN file, from vd_rp2350.c
     { gen_zero_sector, PICOVD_SRAM_START_LBA, },
-    { vd_return_sram_sector, PICOVD_SRAM_START_LBA + PICOVD_SRAM_SIZE_BYTES / EXFAT_BYTES_PER_SECTOR, },
+    { vd_file_sector_get_sram, PICOVD_SRAM_START_LBA + PICOVD_SRAM_SIZE_BYTES / EXFAT_BYTES_PER_SECTOR, },
 #endif
 
 };
@@ -128,14 +128,14 @@ static inline uint32_t get_volume_serial_number(void) {
 }
 
 // Sector generators
-static void gen_zero_sector(uint32_t lba __unused, void* buffer, uint32_t offset __unused, uint32_t bufsize) {
-    memset(buffer, 0, bufsize);
+static void gen_zero_sector(uint32_t lba __unused, uint32_t offset __unused, void* buf, uint32_t bufsize) {
+    memset(buf, 0, bufsize);
 }
 
-static void gen_ones_sector(uint32_t lba __unused, void* buffer, uint32_t offset __unused, uint32_t bufsize) {
-    memset(buffer, 0xff, bufsize);
+static void gen_ones_sector(uint32_t lba __unused, uint32_t offset __unused, void* buf, uint32_t bufsize) {
+    memset(buf, 0xff, bufsize);
 }
-static void gen_extb_sector_signature(void* buffer, uint32_t offset, uint32_t bufsize) {
+static void gen_extb_sector_signature(uint32_t offset, uint8_t *buffer, uint32_t bufsize) {
     // Generate an extended boot sector with the signature bytes 0x55 and 0xAA
     // at the end of the sector, if they fall within the requested offset and size.
     assert(offset < MSC_BLOCK_SIZE);
@@ -146,21 +146,21 @@ static void gen_extb_sector_signature(void* buffer, uint32_t offset, uint32_t bu
     // For each signature byte, see if it falls inside [offset, offset+bufsize).
     // The compiler will optimize this a lot.
     if (offset + bufsize > pos55 && offset < pos55) {
-        ((uint8_t*)buffer)[pos55 - offset] = 0x55;
+        buffer[pos55 - offset] = 0x55;
     }
     if (offset + bufsize > posAA && offset < posAA) {
-        ((uint8_t*)buffer)[posAA - offset] = 0xAA;
+        buffer[posAA - offset] = 0xAA;
     }
 }
 
-static void gen_extb_sector(uint32_t lba, void* buffer, uint32_t offset, uint32_t bufsize) {
-    gen_zero_sector(lba, buffer, offset, bufsize);
-    gen_extb_sector_signature(buffer, offset, bufsize);
+static void gen_extb_sector(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize) {
+    gen_zero_sector(lba, offset, buf, bufsize);
+    gen_extb_sector_signature(offset, buf, bufsize);
 }
 
-static void gen_boot_sector(uint32_t lba, void* buffer  __unused, uint32_t offset, uint32_t bufsize) {
-    uint8_t *base = (uint8_t *)buffer;
-    uint8_t *out = (uint8_t *)buffer;
+static void gen_boot_sector(uint32_t lba __unused, uint32_t offset, void* buf, uint32_t bufsize) {
+    uint8_t *base = (uint8_t *)buf;
+    uint8_t *out = (uint8_t *)buf;
     uint32_t pos = offset;
     uint32_t remaining = bufsize;
 
@@ -193,7 +193,7 @@ static void gen_boot_sector(uint32_t lba, void* buffer  __unused, uint32_t offse
     }
 
     // 4) Fill the sector signature bytes at the end of the buffer
-    gen_extb_sector_signature(buffer, offset, bufsize);
+    gen_extb_sector_signature(offset, buf, bufsize);
 }
 
 /**
@@ -264,7 +264,7 @@ static uint32_t compute_vbr_checksum_runtime(void) {
 }
 
 
-static void gen_cksm_sector(uint32_t lba __unused, void* buffer, uint32_t offset, uint32_t bufsize) {
+static void gen_cksm_sector(uint32_t lba __unused, uint32_t offset, void* buffer, uint32_t bufsize) {
     // For the math, see the C++ source file vd_exfat.cpp
 
     // Sanity-check slice bounds for checksum sector
@@ -291,8 +291,8 @@ static void gen_cksm_sector(uint32_t lba __unused, void* buffer, uint32_t offset
 }
 
 static void gen_fat0_sector(uint32_t lba __unused,
-                            void*    buffer,
                             uint32_t offset,
+                            void*    buffer,
                             uint32_t bufsize)
 {
     // Zero-fill the buffer
@@ -307,10 +307,10 @@ static void gen_fat0_sector(uint32_t lba __unused,
     }
 }
 
-static void gen_upcs_sector(uint32_t lba, void* buffer, uint32_t offset, uint32_t bufsize)
+static void gen_upcs_sector(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize)
 {
     // Ensure buffer and offsets are 16-bit aligned
-    assert(((uintptr_t)buffer & 1) == 0);
+    assert(((uintptr_t)buf & 1) == 0);
     assert((offset & 1) == 0);
     assert((bufsize & 1) == 0);
     assert(lba >= EXFAT_UPCASE_TABLE_START_LBA);
@@ -325,7 +325,7 @@ static void gen_upcs_sector(uint32_t lba, void* buffer, uint32_t offset, uint32_
     assert(base_index + start_word + word_count <= EXFAT_UPCASE_TABLE_LENGTH_SECTORS * words_per_sector);
 
     // Prepare word-based pointers and counts
-    uint16_t* out        = (uint16_t*)buffer;
+    uint16_t* out        = (uint16_t*)buf;
     const uint16_t* table = exfat_upcase_table;
 
     for (uint32_t i = 0; i < word_count; ++i) {
@@ -351,7 +351,7 @@ int32_t vd_virtual_disk_read(uint32_t lba,
     // Check LBA against the region table
     for (size_t i = 0; i < sizeof(lba_regions) / sizeof(lba_region_t); i++) {
         if (lba < lba_regions[i].next_lba) {
-            lba_regions[i].handler(lba, buffer, offset, bufsize);
+            lba_regions[i].handler(lba, offset, buffer, bufsize);
             return bufsize; // Return full sector size
         }
     }

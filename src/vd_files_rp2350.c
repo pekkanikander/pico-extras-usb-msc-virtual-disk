@@ -12,7 +12,7 @@
 
 
 
-void vd_return_bootrom_sector(uint32_t lba, void* buffer, uint32_t offset, uint32_t bufsize) {
+void vd_file_sector_get_bootrom(uint32_t lba, uint32_t offset, void* buffer, uint32_t bufsize) {
     assert(lba >= PICOVD_BOOTROM_START_LBA);
     assert(lba  < PICOVD_BOOTROM_START_LBA + PICOVD_BOOTROM_SIZE_BYTES / EXFAT_BYTES_PER_SECTOR);
 
@@ -20,7 +20,7 @@ void vd_return_bootrom_sector(uint32_t lba, void* buffer, uint32_t offset, uint3
     memcpy(buffer, (const void*)address, bufsize);
 }
 
-void vd_return_sram_sector(uint32_t lba, void* buffer, uint32_t offset, uint32_t bufsize) {
+void vd_file_sector_get_sram(uint32_t lba, uint32_t offset, void* buffer, uint32_t bufsize) {
     assert(lba >= PICOVD_SRAM_START_LBA);
     assert(lba  < PICOVD_SRAM_START_LBA + PICOVD_SRAM_SIZE_BYTES / EXFAT_BYTES_PER_SECTOR);
 
@@ -28,7 +28,7 @@ void vd_return_sram_sector(uint32_t lba, void* buffer, uint32_t offset, uint32_t
     memcpy(buffer, (const void*)address, bufsize);
 }
 
-void vd_return_flash_sector(uint32_t lba, void* buffer, uint32_t offset, uint32_t bufsize) {
+void vd_file_sector_get_flash(uint32_t lba, uint32_t offset, void* buffer, uint32_t bufsize) {
     assert(lba >= PICOVD_FLASH_START_LBA);
     assert(lba  < PICOVD_FLASH_START_LBA + PICOVD_FLASH_SIZE_BYTES / EXFAT_BYTES_PER_SECTOR);
 
