@@ -3,13 +3,16 @@
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
+#include <time.h>
 
-#include <picovd_config.h>
-#include "vd_exfat_params.h"
+#include <pico/time.h>
+
+#include "picovd_config.h"
+
 #include "vd_virtual_disk.h"
+#include "vd_exfat_params.h"
 #include "vd_exfat.h"
 #include "vd_exfat_dirs.h"
-#include "pico/time.h"
 
 static const char* FORMAT_STRING = "%02d:%02d:%02d: LBA=%u, off=%u, len=%u\n";
 

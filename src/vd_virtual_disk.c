@@ -10,9 +10,11 @@
 
 #include <tusb.h>
 #include <picovd_config.h>
+
+#include "vd_virtual_disk.h"
 #include "vd_exfat_params.h"
 #include "vd_exfat.h"
-#include "vd_virtual_disk.h"
+#include "vd_exfat_dirs.h"
 
 #include <pico/unique_id.h>
 

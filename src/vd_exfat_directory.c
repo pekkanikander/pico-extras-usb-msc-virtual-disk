@@ -10,14 +10,15 @@
 #include "pico/bootrom.h"    // get_partition_table_info()
 
 #include <tusb.h>
+#include "tusb_config.h"     // for CFG_TUD_MSC_EP_BUFSIZE
 
 #include "picovd_config.h"
 
+#include "vd_virtual_disk.h"
 #include "vd_exfat_params.h"
 #include "vd_exfat.h"
 #include "vd_exfat_dirs.h"
 
-#include "tusb_config.h"     // for CFG_TUD_MSC_EP_BUFSIZE
 
 // ---------------------------------------------------------------------------
 // Directory set SetChecksum computation
