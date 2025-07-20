@@ -91,15 +91,6 @@ typedef struct __packed exfat_root_dir_entries_first {
 
 STATIC_ASSERT_PACKED(sizeof(exfat_root_dir_entries_first_t) == 3 * 32, "must be 3 * 32 bytes");
 
-/// exFAT File Directory Entry attribute bits (Table 28)
-typedef enum  {
-    EXFAT_FILE_ATTR_READ_ONLY  = 0x0001,  ///< read-only file
-    EXFAT_FILE_ATTR_HIDDEN     = 0x0002,  ///< hidden file
-    EXFAT_FILE_ATTR_SYSTEM     = 0x0004,  ///< system file
-    EXFAT_FILE_ATTR_ARCHIVE    = 0x0020,  ///< archive bit
-    EXFAT_FILE_ATTR_MAX        = 0xFFFF,  ///< force 2 byte value
-} exfat_file_attr_t;
-
 /// exFAT timestamp field (32 bits; see Table 29 §7.4.8)
 typedef uint32_t exfat_timestamp_t;
 
@@ -225,6 +216,9 @@ static constexpr inline exfat_timestamp_t exfat_make_timestamp(
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+// Internal API for dynamic file management (not for external use)
+int vd_exfat_dir_add_file(const vd_file_t* file); // >= 0 if success, -1 if error
 
 // First root directory entries, pre-constructed, in vd_exfat_consts.cpp
 extern const exfat_root_dir_entries_first_t exfat_root_dir_first_entries_data;

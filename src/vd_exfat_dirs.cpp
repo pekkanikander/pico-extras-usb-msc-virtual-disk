@@ -13,7 +13,7 @@ static constexpr exfat_file_directory_dir_entry_t file_dir_entry = {
     .entry_type      = exfat_entry_type_file_directory,
     .secondary_count = 2u,
     .set_checksum    = 0u,  // Computed lazily at runtime
-    .file_attributes = EXFAT_FILE_ATTR_READ_ONLY,
+    .file_attributes = FAT_FILE_ATTR_READ_ONLY,
 };
 
 #if PICOVD_SRAM_ENABLED

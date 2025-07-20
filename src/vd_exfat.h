@@ -3,16 +3,6 @@
 #include <assert.h>
 
 #ifdef __cplusplus
-  // C++11 and later: char16_t is a built-in type
-#else
-  typedef uint16_t char16_t;
-#endif
-
-// Function pointer type for LBA region handlers: fetch or generate bufsize number of bytes
-// at the given LBA + offset into the provided buffer.
-typedef void (*usb_msc_lba_read10_fn_t)(uint32_t lba, void* buffer, uint32_t offset, uint32_t bufsize);
-
-#ifdef __cplusplus
 extern "C" {
 #endif
 
