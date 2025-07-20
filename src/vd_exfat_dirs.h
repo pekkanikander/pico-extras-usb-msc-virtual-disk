@@ -219,7 +219,8 @@ extern "C" {
 #endif
 
 // Internal API for dynamic file management (not for external use)
-int vd_exfat_dir_add_file(const vd_file_t* file); // >= 0 if success, -1 if error
+void vd_files_rp2350_init_bootrom_partitions(void);
+int  vd_exfat_dir_add_file(const vd_file_t* file); // >= 0 if success, -1 if error
 
 // First root directory entries, pre-constructed, in vd_exfat_consts.cpp
 extern const exfat_root_dir_entries_first_t exfat_root_dir_first_entries_data;

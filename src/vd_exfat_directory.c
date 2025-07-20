@@ -7,7 +7,6 @@
 #include <stdint.h>
 #include <assert.h>
 #include <string.h>
-#include "pico/bootrom.h"    // get_partition_table_info()
 
 #include <tusb.h>
 #include "tusb_config.h"     // for CFG_TUD_MSC_EP_BUFSIZE
@@ -18,6 +17,7 @@
 #include "vd_exfat_params.h"
 #include "vd_exfat.h"
 #include "vd_exfat_dirs.h"
+#include "vd_files_rp2350.h"
 
 
 // ---------------------------------------------------------------------------
@@ -161,7 +161,7 @@ void exfat_generate_root_dir_fixed_sector(uint32_t __unused lba, uint32_t offset
 // ---------------------------------------------------------------------------
 
 #ifndef PICOVD_PARAM_MAX_DYNAMIC_FILES
-#define PICOVD_PARAM_MAX_DYNAMIC_FILES 8
+#define PICOVD_PARAM_MAX_DYNAMIC_FILES 12
 #endif
 
 typedef struct {
@@ -192,64 +192,6 @@ static exfat_root_dir_entries_dynamic_file_t directory_entry_set_buffer;
 _Static_assert(sizeof(exfat_root_dir_entries_dynamic_file_t) % CFG_TUD_MSC_EP_BUFSIZE == 0,
               "Dynamic entry-set must be a multiple of MSC EP buffer size");
 #endif
-
-// ---------------------------------------------------------------------------
-// Helper: assemble a 512-byte root-dir slot for partition `part_idx`
-// ---------------------------------------------------------------------------
-
-// Helper: Fill a vd_file_t from a BootROM flash partition entry
-static bool fill_vd_file_from_rp2350_partition(uint32_t part_idx, vd_file_t *file, char16_t *file_name_buf, size_t file_name_buf_len) {
-    enum {
-        PT_LOCATION_AND_FLAGS = 0x0010,
-        PT_NAME               = 0x0080,
-        PT_SINGLE_PARTITION   = 0x8000,
-    };
-
-    static uint32_t pt_buf[34]; // plenty for location/flags + long name (max 32 words)
-    uint32_t flags = PT_SINGLE_PARTITION |
-                     PT_LOCATION_AND_FLAGS |
-                     PT_NAME |
-                     (part_idx << 24);   // partition# in top 8 bits per spec
-
-    int words
-    = rom_get_partition_table_info(pt_buf,
-        (uint32_t)(sizeof(pt_buf)/sizeof(pt_buf[0])),
-        flags);
-    if (words < 3 /* XXX FIXME */) {
-        return false; // BootROM error (invalid idx, hash mismatch, ...)
-    }
-
-    uint32_t *p   = pt_buf + 1;          // skip supported‑flags word
-    uint32_t loc  = *p++;                // permissions_and_location
-    uint32_t flg  = *p++;                // permissions_and_flags
-
-    // Extract start address and length (see §5.9.4.2 of the datasheet)
-    uint32_t flash_page  =  (loc & 0x0001FFFFu);   // 4‑kB units, matching cluster size
-    uint32_t flash_size  = ((loc & 0x03ffe000u) >> 17) * 4096u;
-
-    // NAME field
-    uint8_t  name_len   = (*(uint8_t *)p) & 0x7F;
-    const uint8_t *name_bytes = ((const uint8_t *)p) + 1;     // ASCII/UTF-8
-
-    // Expand the name to UTF-16LE
-    assert(name_len <= 127);
-    for (size_t i = 0; i < name_len; i++) {
-        file_name_buf[i] = name_bytes[i]; // UTF-8 to UTF-16LE
-    }
-
-    // Fill vd_file_t
-    memset(file, 0, sizeof(*file));
-    file->name = file_name_buf;
-    file->name_length = name_len;
-    file->file_attributes = FAT_FILE_ATTR_READ_ONLY;
-    file->first_cluster = flash_size ? flash_page + PICOVD_FLASH_START_CLUSTER : 0;
-    file->size_bytes = flash_size;
-    file->creat_time_sec = 0;
-    file->mod_time_sec = 0;
-    file->get_content = NULL; // No content callback for partitions
-
-    return true;
-}
 
 // Change build_file_entry_set to take a vd_file_t pointer directly
 static bool build_file_entry_set(const vd_file_t *file, exfat_root_dir_entries_dynamic_file_t *des) {
@@ -302,16 +244,6 @@ static bool build_file_entry_set(const vd_file_t *file, exfat_root_dir_entries_d
     return true;
 }
 
-// Build the entry set for a BootROM partition by first filling a vd_file_t, then using build_file_entry_set
-static bool build_rp2350_partition_entry_set(uint32_t slot_idx, exfat_root_dir_entries_dynamic_file_t *des) {
-    static char16_t file_name[127];
-    vd_file_t file;
-    if (!fill_vd_file_from_rp2350_partition(slot_idx, &file, file_name, sizeof(file_name)/sizeof(file_name[0]))) {
-        return false;
-    }
-    return build_file_entry_set(&file, des);
-}
-
 static int32_t  current_slot_idx = -1;  ///< partition index currently in slot_buf
 
 // ---------------------------------------------------------------------------
@@ -328,19 +260,10 @@ void exfat_generate_root_dir_dynamic_sector(uint32_t lba, uint32_t offset, void*
     uint32_t slot_idx = lba - EXFAT_ROOT_DIR_START_LBA - 1u;
 
     bool ok = false;
-#if PICOVD_BOOTROM_PARTITIONS_ENABLED
-    if (slot_idx < 8) {
-        ok = build_rp2350_partition_entry_set(slot_idx, &directory_entry_set_buffer);
-    } else
-#endif
-    {
-        // For dynamic files, use build_file_entry_set with the correct file pointer
-        size_t dyn_idx = slot_idx - 8;
-        if (dyn_idx < dynamic_file_count) {
-            ok = build_file_entry_set(dynamic_files[dyn_idx].file, &directory_entry_set_buffer);
-        } else {
-            ok = false;
-        }
+    if (slot_idx < dynamic_file_count) {
+        ok = build_file_entry_set(dynamic_files[slot_idx].file, &directory_entry_set_buffer);
+    } else {
+        ok = false;
     }
     if (ok) {
         const uint16_t checksum = exfat_dirs_compute_setchecksum(
@@ -352,7 +275,7 @@ void exfat_generate_root_dir_dynamic_sector(uint32_t lba, uint32_t offset, void*
         current_slot_idx = -1;
     }
 
-    // (2) copy the requested slice. XXX HACK: We assume maybe too much,
+    // Copy the requested slice. XXX HACK: We assume maybe too much,
     // but we do static_assert that the entry set is a multiple of CFG_TUD_MSC_EP_BUFSIZE bytes.
     if (current_slot_idx >= 0 && offset < sizeof(directory_entry_set_buffer)) {
         memcpy(buf, ((uint8_t *)&directory_entry_set_buffer) + offset, bufsize);
