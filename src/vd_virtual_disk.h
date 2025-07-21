@@ -27,6 +27,7 @@ typedef enum  {
 // Function pointer type for LBA region handlers: fetch or generate bufsize number of bytes
 // at the given LBA + offset into the provided buffer.
 typedef void (*usb_msc_lba_read10_fn_t)(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
+typedef void (*vd_file_sector_get_fn_t)(uint32_t offset, void* buf, uint32_t bufsize);
 
 // ---------------------------------------------------------------
 // Virtual Disk File Structure
@@ -39,13 +40,14 @@ typedef struct __packed {
     size_t             size_bytes;      // File size in bytes
     time_t             creat_time_sec;  // Creation time in seconds, Unix epoch (since 1.1.1970)
     time_t             mod_time_sec;    // Modification time in seconds
-    usb_msc_lba_read10_fn_t get_content;
+    vd_file_sector_get_fn_t get_content;
 } vd_file_t;
 
 // ---------------------------------------------------------------
 // API to add a file to the virtual disk during runtime
 // ---------------------------------------------------------------
-int vd_add_file(const vd_file_t* file);
+// The caller must retain the vd_file_t struct until the file is removed
+int vd_add_file(vd_file_t* file);
 
 // ---------------------------------------------------------------
 // Virtual Disk Read Callback for USB MSC layer

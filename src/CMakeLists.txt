@@ -17,4 +17,5 @@ target_link_libraries(picovd INTERFACE
     tinyusb_device
     tinyusb_board
     pico_time
+    pico_aon_timer
 )

@@ -4,7 +4,8 @@
 #include <assert.h>
 #include <string.h>
 
-#include <pico/bootrom.h>    // get_partition_table_info()
+#include <pico/bootrom.h>   // get_partition_table_info()
+#include <pico/aon_timer.h> // aon_timer_get_datetime()
 
 #include <tusb.h>
 
@@ -14,19 +15,33 @@
 #include "vd_exfat_params.h"
 #include "vd_exfat_dirs.h"
 
-#define MAX_BOOTROM_PARTITIONS 8
-static vd_file_t partition_files[MAX_BOOTROM_PARTITIONS];
-static char16_t partition_names[MAX_BOOTROM_PARTITIONS][128];
+#ifndef PICOVD_BOOTROM_PARTITIONS_NAMES_STORAGE_SIZE
+#define PICOVD_BOOTROM_PARTITIONS_NAMES_STORAGE_SIZE 256
+#endif
+
+// Single contiguous buffer for all partition names (UTF-16)
+static char16_t partition_name_buf[PICOVD_BOOTROM_PARTITIONS_NAMES_STORAGE_SIZE / sizeof(char16_t)];
+static size_t partition_name_buf_used = 0;
+
+#ifndef PICOVD_BOOTROM_PARTITIONS_MAX_FILES
+#define PICOVD_BOOTROM_PARTITIONS_MAX_FILES 8
+#endif
+typedef struct {
+    vd_file_t file;
+    char16_t *name;
+} partition_file_entry_t;
+
+static partition_file_entry_t partition_file_entries[PICOVD_BOOTROM_PARTITIONS_MAX_FILES];
 
 // Helper: Fill a vd_file_t from a BootROM flash partition entry
-bool fill_vd_file_from_rp2350_partition(uint32_t part_idx, vd_file_t *file, char16_t *file_name_buf, size_t file_name_buf_len) {
+bool fill_vd_file_from_rp2350_partition(uint32_t part_idx, partition_file_entry_t *entry) {
     enum {
         PT_LOCATION_AND_FLAGS = 0x0010,
         PT_NAME               = 0x0080,
         PT_SINGLE_PARTITION   = 0x8000,
     };
 
-    static uint32_t pt_buf[34]; // plenty for location/flags + long name (max 32 words)
+    uint32_t pt_buf[34]; // plenty for location/flags + long name (max 32 words)
     uint32_t flags = PT_SINGLE_PARTITION |
                      PT_LOCATION_AND_FLAGS |
                      PT_NAME |
@@ -52,32 +67,58 @@ bool fill_vd_file_from_rp2350_partition(uint32_t part_idx, vd_file_t *file, char
     uint8_t  name_len   = (*(uint8_t *)p) & 0x7F;
     const uint8_t *name_bytes = ((const uint8_t *)p) + 1;     // ASCII/UTF-8
 
-    // Expand the name to UTF-16LE
-    assert(name_len <= 127);
-    for (size_t i = 0; i < name_len; i++) {
-        file_name_buf[i] = name_bytes[i]; // UTF-8 to UTF-16LE
+    uint8_t base_name[PICOVD_BOOTROM_PARTITIONS_FILE_NAME_LEN];
+
+    // Use the compile-time name if the partition name is empty. // XXX TODO: Not tested yet.
+    if (name_len == 0) {
+        name_len = PICOVD_BOOTROM_PARTITIONS_FILE_NAME_LEN;
+        memcpy(base_name, PICOVD_BOOTROM_PARTITIONS_FILE_NAME_BASE, PICOVD_BOOTROM_PARTITIONS_FILE_NAME_LEN);
+        base_name[PICOVD_BOOTROM_PARTITIONS_FILE_NAME_N_IDX] = '0' + part_idx;
+        name_bytes = (const uint8_t *)base_name;
     }
 
-    // Fill vd_file_t
-    memset(file, 0, sizeof(*file));
-    file->name = file_name_buf;
-    file->name_length = name_len;
-    file->file_attributes = FAT_FILE_ATTR_READ_ONLY;
-    file->first_cluster = flash_size ? flash_page + PICOVD_FLASH_START_CLUSTER : 0;
-    file->size_bytes = flash_size;
-    file->creat_time_sec = 0;
-    file->mod_time_sec = 0;
-    file->get_content = NULL; // No content callback for partitions
+    struct timespec ts;
+    aon_timer_get_time(&ts);
+
+    // Linear allocation for UTF-16 name
+    if (partition_name_buf_used + name_len > (sizeof(partition_name_buf) / sizeof(char16_t))) {
+        // XXX TODO: Dynamically allocate a buffer for the name from the heap
+        printf("BootROM partition name buffer exhausted, skipping partition %u\n", part_idx);
+        return false;
+    }
+    char16_t *name_ptr = &partition_name_buf[partition_name_buf_used];
+    for (size_t i = 0; i < name_len; i++) {
+        name_ptr[i] = name_bytes[i]; // UTF-8 to UTF-16LE (ASCII only)
+    }
+    partition_name_buf_used += name_len;
+
+    entry->name = name_ptr;
+    entry->file = (vd_file_t){
+        .name            = name_ptr,
+        .name_length     = name_len,
+        .file_attributes = FAT_FILE_ATTR_READ_ONLY,
+        .first_cluster   = flash_size ? flash_page + PICOVD_FLASH_START_CLUSTER : 0,
+        .size_bytes      = flash_size,
+        .creat_time_sec  = ts.tv_sec,
+        .mod_time_sec    = ts.tv_sec,
+        .get_content     = NULL, // No content callback for partitions
+    };
 
     return true;
 }
 
 void vd_files_rp2350_init_bootrom_partitions(void) {
-    for (uint32_t i = 0; i < MAX_BOOTROM_PARTITIONS; ++i) {
-        if (fill_vd_file_from_rp2350_partition(i, &partition_files[i], partition_names[i], 128)) {
-            vd_exfat_dir_add_file(&partition_files[i]);
+#if PICOVD_BOOTROM_PARTITIONS_ENABLED
+    size_t name_len = 0;
+    #ifndef PICOVD_BOOTROM_PARTITIONS_MAX_FILES
+    for (uint32_t i = 0; i < PICOVD_BOOTROM_PARTITIONS_MAX_FILES; ++i) {
+        #endif
+        char16_t *name_ptr = NULL;
+        if (fill_vd_file_from_rp2350_partition(i, &partition_file_entries[i])) {
+            vd_exfat_dir_add_file(&partition_file_entries[i].file);
         }
     }
+#endif
 }
 
 void vd_file_sector_get_bootrom(uint32_t lba, uint32_t offset, void* buffer, uint32_t bufsize) {
