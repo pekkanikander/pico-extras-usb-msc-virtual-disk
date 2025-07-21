@@ -30,10 +30,10 @@ typedef void (*usb_msc_lba_read10_fn_t)(uint32_t lba, uint32_t offset, void* buf
 typedef void (*vd_file_sector_get_fn_t)(uint32_t offset, void* buf, uint32_t bufsize);
 
 // ---------------------------------------------------------------
-// Virtual Disk File Structure
+// Virtual Disk File Structures
 // ---------------------------------------------------------------
-typedef struct vd_static_file_s vd_static_file_t; // Opaque static file type
 
+// Dynamic file structure: may be changed at runtime
 typedef struct __packed {
     const char16_t *   name;            // Pointer to UTF-16LE file name
     uint8_t            name_length;     // Name length, in UTF-16 code units
@@ -44,6 +44,47 @@ typedef struct __packed {
     time_t             mod_time_sec;    // Modification time in seconds
     vd_file_sector_get_fn_t get_content;
 } vd_dynamic_file_t;
+
+#define STR_UTF16_EXPAND(x) u ## #x
+#define PICOVD_DEFINE_FILE_RUNTIME(struct_name, file_name, file_size_bytes, get_content_cb) \
+    vd_dynamic_file_t struct_name = { \
+        .name = STR_UTF16_EXPAND(file_name), \
+        .name_length = (sizeof(file_name) / sizeof(char16_t)) - 1, \
+        .file_attributes = FAT_FILE_ATTR_READ_ONLY, \
+        .first_cluster = 0, \
+        .size_bytes = file_size_bytes, \
+        .creat_time_sec = 0, \
+        .mod_time_sec = 0, \
+        .get_content = get_content_cb, \
+    };
+
+// Static file structure: fixed at compile time
+
+typedef struct vd_static_file_s vd_static_file_t; // Opaque static file type
+
+// Compile-time directory entries for static files
+#define PICOVD_DEFINE_FILE_STATIC(struct_name, file_name_str, file_size_bytes) \
+    const vd_static_file_t struct_name = { \
+        .file_dir_entry = { \
+            .entry_type = exfat_entry_type_file_directory, \
+            .secondary_count = 2u, \
+            .set_checksum = 0u, /* Computed lazily at runtime */ \
+            .file_attributes = FAT_FILE_ATTR_READ_ONLY, \
+        }, \
+        .stream_extension_entry = { \
+            .entry_type = exfat_entry_type_stream_extension, \
+            .secondary_flags = 0x03, /* XXX */ \
+            .name_length = PICOVD_UTF16_STRING_LEN(STR_UTF16_EXPAND(file_name_str)), \
+            .name_hash = exfat_dirs_compute_name_hash(STR_UTF16_EXPAND(file_name_str), PICOVD_UTF16_STRING_LEN(STR_UTF16_EXPAND(file_name_str))), \
+            .valid_data_length = file_size_bytes, \
+            .first_cluster = 0, \
+            .data_length = file_size_bytes, \
+        }, \
+        .file_name_entry = { \
+            .entry_type = exfat_entry_type_file_name, \
+            .file_name = STR_UTF16_EXPAND(file_name_str), \
+        }, \
+    };
 
 // ---------------------------------------------------------------
 // API to add a file to the virtual disk during runtime

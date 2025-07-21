@@ -10,9 +10,6 @@
 #include "picovd_config.h"
 
 #include "vd_virtual_disk.h"
-#include "vd_exfat_params.h"
-#include "vd_exfat.h"
-#include "vd_exfat_dirs.h"
 
 static void changing_file_content_cb(uint32_t offset, void* buffer, uint32_t bufsize) {
 
@@ -30,16 +27,12 @@ static void changing_file_content_cb(uint32_t offset, void* buffer, uint32_t buf
                       offset, bufsize);
 }
 
-static vd_dynamic_file_t changing_file = {
-    .name            = PICOVD_CHANGING_FILE_NAME,
-    .name_length     = sizeof(PICOVD_CHANGING_FILE_NAME) / sizeof(char16_t) - 1, // Exclude NUL
-    .file_attributes = FAT_FILE_ATTR_READ_ONLY,
-    .first_cluster   = 0, // Allocated at runtime
-    .size_bytes      = PICOVD_CHANGING_FILE_SIZE_BYTES,
-    .creat_time_sec  = 0,
-    .mod_time_sec    = 0,
-    .get_content     = changing_file_content_cb,
-};
+PICOVD_DEFINE_FILE_RUNTIME(
+    changing_file,
+    PICOVD_CHANGING_FILE_NAME,
+    PICOVD_CHANGING_FILE_SIZE_BYTES,
+    changing_file_content_cb
+);
 
 // Initialization function to register the file at runtime
 void vd_files_changing_init(void) {

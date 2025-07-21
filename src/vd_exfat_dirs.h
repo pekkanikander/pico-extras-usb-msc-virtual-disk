@@ -154,9 +154,9 @@ STATIC_ASSERT_PACKED(sizeof(exfat_file_name_dir_entry_t) == 32,
 
 /// Compile time generated exFAT root directory entry sets
 typedef struct __packed vd_static_file_s {
-    exfat_file_directory_dir_entry_t      file_directory;    // 32 bytes
-    exfat_stream_extension_dir_entry_t    stream_extension;  // 32 bytes
-    exfat_file_name_dir_entry_t           file_name[1];      // n * 32 bytes
+    exfat_file_directory_dir_entry_t      file_dir_entry;
+    exfat_stream_extension_dir_entry_t    stream_extension_entry;
+    exfat_file_name_dir_entry_t           file_name_entry;
 } vd_static_file_t;
 STATIC_ASSERT_PACKED(sizeof(vd_static_file_t) == 3 * 32,
     "Fixed exFAT file/directory entry set length must be == 3 * 32 bytes");
