@@ -5,6 +5,7 @@
         "ms-vscode.cpptools-extension-pack",
         "ms-vscode.cmake-tools",
         "ms-vscode.vscode-serial-monitor",
-        "raspberry-pi.raspberry-pi-pico"
+        "raspberry-pi.raspberry-pi-pico",
+        "paulober.pico-w-go"
     ]
 }
