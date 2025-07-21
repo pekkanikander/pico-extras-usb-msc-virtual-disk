@@ -29,7 +29,8 @@
  */
 
 // Simple sequential allocator for dynamic clusters
-static uint32_t next_dynamic_cluster = PICOVD_DYNAMIC_AREA_START_CLUSTER;
+static uint32_t dynamic_cluster_map_next_cluster = PICOVD_DYNAMIC_AREA_START_CLUSTER;
+static size_t   dynamic_cluster_map_count = 0;
 
 // Dynamic cluster map entry: maps a cluster range to a handler
 typedef struct {
@@ -43,7 +44,6 @@ typedef struct {
 #endif
 
 static dynamic_cluster_map_entry_t dynamic_cluster_map[PICOVD_PARAM_MAX_DYNAMIC_FILES];
-static size_t dynamic_cluster_map_count = 0;
 
 // Allocates clusters for a dynamic file and registers its handler
 static uint32_t vd_dynamic_cluster_alloc(size_t region_size_bytes, void (*handler)(uint32_t file_offset, void* buf, uint32_t bufsize)) {
@@ -51,14 +51,14 @@ static uint32_t vd_dynamic_cluster_alloc(size_t region_size_bytes, void (*handle
     size_t clusters_needed = (region_size_bytes + cluster_size_bytes - 1) / cluster_size_bytes;
 
     // Check if there is enough space in the dynamic area
-    if (next_dynamic_cluster + clusters_needed >= PICOVD_DYNAMIC_AREA_END_CLUSTER) {
+    if (dynamic_cluster_map_next_cluster + clusters_needed >= PICOVD_DYNAMIC_AREA_END_CLUSTER) {
         return 0; // Out of space
     }
     if (dynamic_cluster_map_count >= PICOVD_PARAM_MAX_DYNAMIC_FILES) {
         return 0; // Out of mapping entries
     }
-    uint32_t allocated_cluster = next_dynamic_cluster;
-    next_dynamic_cluster += clusters_needed;
+    uint32_t allocated_cluster = dynamic_cluster_map_next_cluster;
+    dynamic_cluster_map_next_cluster += clusters_needed;
 
     dynamic_cluster_map[dynamic_cluster_map_count++] = (dynamic_cluster_map_entry_t){
         .first_cluster = allocated_cluster,
@@ -453,5 +453,26 @@ int vd_add_file(vd_dynamic_file_t* file) {
         }
     }
     vd_exfat_dir_add_file(file);
+    return 0;
+}
+
+int vd_update_file(vd_dynamic_file_t *file, size_t size_bytes) {
+    if (size_bytes > file->size_bytes) {
+        const int32_t cluster_size_bytes = EXFAT_BYTES_PER_SECTOR * EXFAT_SECTORS_PER_CLUSTER;
+        const int32_t clusters_needed    = (      size_bytes + cluster_size_bytes - 1) / cluster_size_bytes;
+        const int32_t clusters_allocated = (file->size_bytes + cluster_size_bytes - 1) / cluster_size_bytes;
+        const int32_t clusters_to_add    = clusters_needed - clusters_allocated;
+        if (clusters_to_add > 0) {
+            if (file->first_cluster + clusters_allocated == dynamic_cluster_map_next_cluster &&
+                dynamic_cluster_map_next_cluster + clusters_to_add <= PICOVD_DYNAMIC_AREA_END_CLUSTER) {
+                // We are at the end of the dynamic cluster map and we can allocate new clusters.
+                dynamic_cluster_map_next_cluster += clusters_to_add;
+            } else {
+                return -1;
+            }
+        }
+    }
+    file->size_bytes = size_bytes;
+    vd_exfat_dir_update_file(file, true);
     return 0;
 }

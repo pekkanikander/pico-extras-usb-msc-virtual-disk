@@ -87,10 +87,15 @@ typedef struct vd_static_file_s vd_static_file_t; // Opaque static file type
     };
 
 // ---------------------------------------------------------------
-// API to add a file to the virtual disk during runtime
+// API to handle files on the virtual disk during runtime
 // ---------------------------------------------------------------
+// Add a file to the virtual disk during runtime
 // The caller must retain the vd_dynamic_file_t struct until the file is removed
 int vd_add_file(vd_dynamic_file_t* file);
+
+// Update the size of a dynamic file on the virtual disk during runtime
+// Updates the file size and modification time
+int vd_update_file(vd_dynamic_file_t* file, size_t size_bytes);
 
 // ---------------------------------------------------------------
 // Virtual Disk Read Callback for USB MSC layer
@@ -106,11 +111,6 @@ extern int32_t vd_virtual_disk_read(uint32_t lba, uint32_t offset, void* buf, ui
 extern void vd_file_sector_get_bootrom(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
 extern void vd_file_sector_get_sram(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
 extern void vd_file_sector_get_flash(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
-
-// ---------------------------------------------------------------
-// Function to provide the changing file contents sector
-// ---------------------------------------------------------------
-extern void vd_file_sector_get_changing_file(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
 
 // ---------------------------------------------------------------
 // Indicate that the virtual disk contents have changed,

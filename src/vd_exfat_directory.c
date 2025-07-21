@@ -177,8 +177,22 @@ int vd_exfat_dir_add_file(const vd_dynamic_file_t* file) {
     if (dynamic_file_count >= PICOVD_PARAM_MAX_DYNAMIC_FILES) return -1;
     dynamic_files[dynamic_file_count].file      = file;
     dynamic_files[dynamic_file_count].name_hash = exfat_dirs_compute_name_hash(file->name, file->name_length);
+    vd_exfat_dir_update_file(file, false);
     return (int)dynamic_file_count++;
 }
+
+int vd_exfat_dir_update_file(vd_dynamic_file_t* file, bool update_disk) {
+    absolute_time_t now = get_absolute_time();
+    uint64_t us = to_us_since_boot(now);
+    uint32_t secs = us / 1000000;
+
+    file->mod_time_sec = secs;
+    if (update_disk) {
+        vd_virtual_disk_contents_changed(false);
+    }
+    return 0;
+}
+
 
 // ---------------------------------------------------------------------------
 // Generate a slice of a root directory sector, as requested by the MSC layer.
