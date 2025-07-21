@@ -165,7 +165,7 @@ void exfat_generate_root_dir_fixed_sector(uint32_t __unused lba, uint32_t offset
 #endif
 
 typedef struct {
-    const vd_file_t* file;
+    const vd_dynamic_file_t* file;
     uint16_t         name_hash;
 } dynamic_file_entry_t;
 
@@ -173,7 +173,7 @@ static dynamic_file_entry_t dynamic_files[PICOVD_PARAM_MAX_DYNAMIC_FILES];
 static size_t dynamic_file_count = 0;
 
 // Add a dynamic file, returns index or -1 if full
-int vd_exfat_dir_add_file(const vd_file_t* file) {
+int vd_exfat_dir_add_file(const vd_dynamic_file_t* file) {
     if (dynamic_file_count >= PICOVD_PARAM_MAX_DYNAMIC_FILES) return -1;
     dynamic_files[dynamic_file_count].file      = file;
     dynamic_files[dynamic_file_count].name_hash = exfat_dirs_compute_name_hash(file->name, file->name_length);
@@ -194,7 +194,7 @@ _Static_assert(sizeof(exfat_root_dir_entries_dynamic_file_t) % CFG_TUD_MSC_EP_BU
 #endif
 
 // Change build_file_entry_set to take a vd_file_t pointer directly
-static bool build_file_entry_set(const vd_file_t *file, exfat_root_dir_entries_dynamic_file_t *des) {
+static bool build_file_entry_set(const vd_dynamic_file_t *file, exfat_root_dir_entries_dynamic_file_t *des) {
     assert(file != NULL);
     memset(des, 0x00, sizeof(*des));
 

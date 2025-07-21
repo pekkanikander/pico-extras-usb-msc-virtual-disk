@@ -32,6 +32,8 @@ typedef void (*vd_file_sector_get_fn_t)(uint32_t offset, void* buf, uint32_t buf
 // ---------------------------------------------------------------
 // Virtual Disk File Structure
 // ---------------------------------------------------------------
+typedef struct vd_static_file_s vd_static_file_t; // Opaque static file type
+
 typedef struct __packed {
     const char16_t *   name;            // Pointer to UTF-16LE file name
     uint8_t            name_length;     // Name length, in UTF-16 code units
@@ -41,13 +43,13 @@ typedef struct __packed {
     time_t             creat_time_sec;  // Creation time in seconds, Unix epoch (since 1.1.1970)
     time_t             mod_time_sec;    // Modification time in seconds
     vd_file_sector_get_fn_t get_content;
-} vd_file_t;
+} vd_dynamic_file_t;
 
 // ---------------------------------------------------------------
 // API to add a file to the virtual disk during runtime
 // ---------------------------------------------------------------
-// The caller must retain the vd_file_t struct until the file is removed
-int vd_add_file(vd_file_t* file);
+// The caller must retain the vd_dynamic_file_t struct until the file is removed
+int vd_add_file(vd_dynamic_file_t* file);
 
 // ---------------------------------------------------------------
 // Virtual Disk Read Callback for USB MSC layer

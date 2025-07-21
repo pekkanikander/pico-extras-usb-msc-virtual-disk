@@ -153,12 +153,12 @@ STATIC_ASSERT_PACKED(sizeof(exfat_file_name_dir_entry_t) == 32,
     "File Name exFAT directory entry must be 32 bytes");
 
 /// Compile time generated exFAT root directory entry sets
-typedef struct __packed exfat_root_dir_entries_fixed_file {
+typedef struct __packed vd_static_file_s {
     exfat_file_directory_dir_entry_t      file_directory;    // 32 bytes
     exfat_stream_extension_dir_entry_t    stream_extension;  // 32 bytes
     exfat_file_name_dir_entry_t           file_name[1];      // n * 32 bytes
-} exfat_root_dir_entries_fixed_file_t;
-STATIC_ASSERT_PACKED(sizeof(exfat_root_dir_entries_fixed_file_t) == 3 * 32,
+} vd_static_file_t;
+STATIC_ASSERT_PACKED(sizeof(vd_static_file_t) == 3 * 32,
     "Fixed exFAT file/directory entry set length must be == 3 * 32 bytes");
 
 /// Dynamically generated exFAT root directory entry sets
@@ -220,19 +220,19 @@ extern "C" {
 
 // Internal API for dynamic file management (not for external use)
 void vd_files_rp2350_init_bootrom_partitions(void);
-int  vd_exfat_dir_add_file(const vd_file_t* file); // >= 0 if success, -1 if error
+int  vd_exfat_dir_add_file(const vd_dynamic_file_t* file); // >= 0 if success, -1 if error
 
 // First root directory entries, pre-constructed, in vd_exfat_consts.cpp
 extern const exfat_root_dir_entries_first_t exfat_root_dir_first_entries_data;
 
 // Directory entries for SRAM.BIN, pre-constructed
-extern const exfat_root_dir_entries_fixed_file_t exfat_root_dir_sram_file_data;
+extern const vd_static_file_t exfat_root_dir_sram_file_data;
 
 // Directory entries for BOOTROM.BIN, pre-constructed
-extern const exfat_root_dir_entries_fixed_file_t exfat_root_dir_bootrom_file_data;
+extern const vd_static_file_t exfat_root_dir_bootrom_file_data;
 
 // Directory entries for FLASH.BIN, pre-constructed
-extern const exfat_root_dir_entries_fixed_file_t exfat_root_dir_flash_file_data;
+extern const vd_static_file_t exfat_root_dir_flash_file_data;
 
 extern uint16_t exfat_dirs_compute_setchecksum(const uint8_t *entries, size_t len);
 

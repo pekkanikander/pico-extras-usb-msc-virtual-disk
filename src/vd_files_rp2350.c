@@ -27,7 +27,7 @@ static size_t partition_name_buf_used = 0;
 #define PICOVD_BOOTROM_PARTITIONS_MAX_FILES 8
 #endif
 typedef struct {
-    vd_file_t file;
+    vd_dynamic_file_t file;
     char16_t *name;
 } partition_file_entry_t;
 
@@ -93,7 +93,7 @@ bool fill_vd_file_from_rp2350_partition(uint32_t part_idx, partition_file_entry_
     partition_name_buf_used += name_len;
 
     entry->name = name_ptr;
-    entry->file = (vd_file_t){
+    entry->file = (vd_dynamic_file_t){
         .name            = name_ptr,
         .name_length     = name_len,
         .file_attributes = FAT_FILE_ATTR_READ_ONLY,
@@ -110,9 +110,7 @@ bool fill_vd_file_from_rp2350_partition(uint32_t part_idx, partition_file_entry_
 void vd_files_rp2350_init_bootrom_partitions(void) {
 #if PICOVD_BOOTROM_PARTITIONS_ENABLED
     size_t name_len = 0;
-    #ifndef PICOVD_BOOTROM_PARTITIONS_MAX_FILES
     for (uint32_t i = 0; i < PICOVD_BOOTROM_PARTITIONS_MAX_FILES; ++i) {
-        #endif
         char16_t *name_ptr = NULL;
         if (fill_vd_file_from_rp2350_partition(i, &partition_file_entries[i])) {
             vd_exfat_dir_add_file(&partition_file_entries[i].file);

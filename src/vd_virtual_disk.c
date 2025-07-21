@@ -444,7 +444,7 @@ int32_t vd_virtual_disk_read(uint32_t lba,
     return bufsize;
 }
 
-int vd_add_file(vd_file_t* file) {
+int vd_add_file(vd_dynamic_file_t* file) {
     // If the file has no first cluster defined, allocate cluster chain
     if (file->first_cluster == 0) {
         file->first_cluster = vd_dynamic_cluster_alloc(file->size_bytes, file->get_content);

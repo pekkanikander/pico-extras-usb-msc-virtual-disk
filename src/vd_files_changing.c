@@ -30,7 +30,7 @@ static void changing_file_content_cb(uint32_t offset, void* buffer, uint32_t buf
                       offset, bufsize);
 }
 
-static vd_file_t changing_file = {
+static vd_dynamic_file_t changing_file = {
     .name            = PICOVD_CHANGING_FILE_NAME,
     .name_length     = sizeof(PICOVD_CHANGING_FILE_NAME) / sizeof(char16_t) - 1, // Exclude NUL
     .file_attributes = FAT_FILE_ATTR_READ_ONLY,
