@@ -1,22 +1,31 @@
 # Major bugs
 
-* (Currently none known)
+* Fix TinyUSB version and callback mess
+* Fix the occasional (rare) USB Panic
+```
+    WARN: starting new transfer on already active ep 83
+    *** PANIC ***
+    ep 83 was already available
+```
 
 # Known minor bugs
 
-* Fix bitmap so that macOS fsck is happy.
-* Remove stray invalid file names so that macOS fsck is happy.
-* Check upcase table / upcase table test case. Test case fails.
-* Go carefully through TinyUSB MSC callback layer. Currently hacky and maybe faulty for some SCSI commands.
+* Go carefully through TinyUSB MSC callback layer.
+  Currently hacky and maybe faulty for some SCSI commands.
   * in tud_msc_scsi_cb don't return error on default, maybe we should?
   * we handle some commands in tud_msc_scsi_pre_cb in some cases, but fail to
     handle them in tud_msc_scsi_cb if they default driver doesn't handle them.
+* Add dynamic name allocation for long partition names. Now they fail with printf.
+* Fix bitmap so that macOS fsck is happy.
+* Remove stray invalid file names so that macOS fsck is happy.
+* Check upcase table / upcase table test case. Test case fails.
 
 # Optimizations to be done
 
 * Cleanup TinyUSB MSC integration, once stabilised
 * Reduce stack use in generating the VBR checksum
 * Try to get to work the optimised, affine field mathematics dependent VBR checksum generation
+* Rewrite / optimise LBA handling table
 
 # Features
 
