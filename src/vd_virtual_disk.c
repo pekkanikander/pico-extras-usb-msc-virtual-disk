@@ -482,6 +482,8 @@ int vd_update_file(vd_dynamic_file_t *file, size_t size_bytes) {
         }
     }
     file->size_bytes = size_bytes;
-    vd_exfat_dir_update_file(file, true);
+    vd_exfat_dir_update_file(file);
+    vd_virtual_disk_contents_changed(false);
+
     return 0;
 }
