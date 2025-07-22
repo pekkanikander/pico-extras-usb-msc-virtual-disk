@@ -98,7 +98,10 @@ typedef struct vd_static_file_s vd_static_file_t; // Opaque, see vd_exfat_dirs.h
  * @param file_name_str    File name (as a string literal, e.g., "README.TXT")
  * @param file_size_bytes  File size in bytes
  *
- * @note The file name is automatically converted to UTF-16LE as required by exFAT.
+ * @note The file name must be a string literal and
+ *       is automatically encoded as UTF-16LE as required by exFAT.
+ * @note The struct is placed in a special linker section, in the flash, and auto-collected at link time.
+ *       The default root directory handler automatically provides the generated directory entries.
  * @note The file is initially read-only. Other attributes are currently not supported.
  *
  * @see vd_static_file_t

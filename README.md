@@ -180,7 +180,12 @@ To define a static file, use the `PICOVD_DEFINE_FILE_STATIC` macro:
 PICOVD_DEFINE_FILE_STATIC(my_static_file, "README.TXT", 256);
 ```
 - The file is always read-only. Other file attributes are currently not supported.
-- Curently there is no clear API to provide the file contents.
+- The file name must be a string literal (e.g., "README.TXT"),
+  or a macro expanding into a string literal.
+- The macro ensures the file name is encoded as UTF-16LE for exFAT.
+- All static files are auto-collected at link time and
+  automatically provided into the virtual disk root directory.
+- Currently there is no clear API to provide the file contents.
   This will be fixed in a future version.
 
 ## Design choices
