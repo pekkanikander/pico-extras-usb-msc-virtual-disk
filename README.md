@@ -160,8 +160,8 @@ void my_file_content_cb(uint32_t offset, void* buf, uint32_t bufsize) {
 // Define the file (e.g., "DYNAMIC.TXT" with initial size 128 bytes)
 PICOVD_DEFINE_FILE_RUNTIME(my_dynamic_file, "DYNAMIC.TXT", 128, my_file_content_cb);
 
-// Register the file at runtime (e.g., during initialization)
-vd_add_file(&my_dynamic_file);
+// Register the file at runtime (e.g., during initialization), with maximum size of 4kB.
+vd_add_file(&my_dynamic_file, (4 * 1024));
 ```
 - The `vd_dynamic_file_t` struct must remain valid while the file is registered.
 - To update the file size later, use `vd_update_file()`.

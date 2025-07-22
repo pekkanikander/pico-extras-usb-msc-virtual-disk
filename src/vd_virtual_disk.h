@@ -136,28 +136,42 @@ typedef struct vd_static_file_s vd_static_file_t; // Opaque, see vd_exfat_dirs.h
 /**
  * @brief Register a dynamic (runtime) file with the PicoVD virtual disk.
  *
- * This function adds a file defined with PICOVD_DEFINE_FILE_RUNTIME (or a manually constructed
- * vd_dynamic_file_t struct) to the virtual disk, making it visible to the host as part of the exFAT filesystem.
+ * This function adds a file defined with PICOVD_DEFINE_FILE_RUNTIME
+ * (or a manually constructed vd_dynamic_file_t struct) to the virtual disk,
+ * making it visible to the host as part of the exFAT filesystem.
  *
- * The file's cluster allocation is based on max_size_bytes, which sets the maximum size the file
- * may grow to at runtime. This allows the file's length to change dynamically (up to the reserved space).
+ * The file's cluster allocation is based on max_size_bytes,
+ * which sets the maximum size the file may grow to at runtime.
+ * This allows the file's length to change dynamically (up to the reserved space).
+ * Reserving space does not cost anything, but it does reserve space in the dynamic area.
+ * Hence, as long as you are not short of the dynamic area,
+ * you can allocate as much space as you want for each of your files.
  *
  * Whenever the file's size or contents change, the file should be updated using vd_update_file().
  * This informs the host that the file has changed and should be re-read.
+ * Depending the host's caching strategy, the file may not be re-read immediately.
+ * If you don't call vd_update_file(), the host may not notice the change for a long time,
+ * even minutes or sometimes hours.
+ *
+ * However, notifying the host is a costly operation, causing the host to re-read
+ * all of the virtual disk metadata and re-scanning the file system.
+ * Hence, you should only call vd_update_file() when you are done with the changes.
  *
  * @param file Pointer to a vd_dynamic_file_t structure describing the file.
  * @param max_size_bytes Maximum file size (in bytes) that may be allocated for this file at runtime.
- *                      The file's cluster chain is allocated to cover this size.
+ *                      The file's cluster chain space is allocated to cover this size.
  *
  * @return 0 on success, negative value on error (e.g., if the requested space cannot be allocated).
  *
- * @note The file is initially read-only. Other attributes are currently not supported.
+ * @note The file is initially read-only. For other attributes, you have to set them manually.
  * @note The number of dynamic files is limited by PICOVD_PARAM_MAX_DYNAMIC_FILES.
  * @note The vd_dynamic_file_t struct must remain valid while the file is registered.
- *
+ * @note vd_add_file() does not call vd_virtual_disk_contents_changed() automatically.
+ *       You should call it after adding all your files.
  * @see PICOVD_DEFINE_FILE_RUNTIME
  * @see vd_update_file
  * @see vd_dynamic_file_t
+ * @see vd_virtual_disk_contents_changed
  */
 int vd_add_file(vd_dynamic_file_t* file, size_t max_size_bytes);
 
@@ -185,6 +199,28 @@ int vd_add_file(vd_dynamic_file_t* file, size_t max_size_bytes);
  */
 int vd_update_file(vd_dynamic_file_t* file, size_t size_bytes);
 
+/**
+ * @brief Notify the host that the virtual disk contents have changed.
+ *
+ * This function signals to the USB MSC layer that the contents of the virtual disk
+ * have changed, prompting the host operating system to re-read the disk and update
+ * its cached view. This is useful after making changes to file data, directory entries,
+ * or other on-disk structures that should be visible to the host.
+ *
+ * @param hard_reset If true, forces a full USB disconnect/reconnect (remount) to ensure
+ *                   the host discards all cached metadata and data. If false, only a soft
+ *                   notification is sent (host may still cache some data).
+ *
+ * @note Use this function after modifying files, directories, or metadata that must be
+ *       immediately visible to the host. Frequent use may cause the host to remount the disk,
+ *       which can interrupt ongoing file operations.
+ * @note vd_update_file calls this function automatically with hard_reset=false.
+ * @see vd_update_file
+ */
+extern void vd_virtual_disk_contents_changed(bool hard_reset);
+
+
+
 // ---------------------------------------------------------------
 // Virtual Disk Read Callback for USB MSC layer
 // ---------------------------------------------------------------
@@ -199,11 +235,5 @@ extern int32_t vd_virtual_disk_read(uint32_t lba, uint32_t offset, void* buf, ui
 extern void vd_file_sector_get_bootrom(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
 extern void vd_file_sector_get_sram(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
 extern void vd_file_sector_get_flash(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
-
-// ---------------------------------------------------------------
-// Indicate that the virtual disk contents have changed,
-// forcing the host to re-read the disk.
-// ---------------------------------------------------------------
-extern void vd_virtual_disk_contents_changed(bool hard_reset);
 
 #endif // VD_VIRTUAL_DISK_H
