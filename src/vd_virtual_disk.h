@@ -45,7 +45,28 @@ typedef struct __packed {
     vd_file_sector_get_fn_t get_content;
 } vd_dynamic_file_t;
 
-#define STR_UTF16_EXPAND(x) u ## #x
+/**
+ * @brief Define a dynamic (runtime) virtual file for the PicoVD virtual disk.
+ *
+ * This macro creates and initializes a vd_dynamic_file_t structure for a file
+ * whose contents and size may change at runtime.
+ * The file shall be registered with the virtual disk using vd_add_file().
+ *
+ * Dynamic files are useful for exposing data that changes over time or is generated on demand.
+ *
+ * @param struct_name   Name of the variable to define (vd_dynamic_file_t)
+ * @param file_name     File name (as a string literal, e.g., "DYNAMIC.TXT")
+ * @param file_size_bytes Initial file size in bytes (may be updated later)
+ * @param get_content_cb Callback function to provide file content (see vd_file_sector_get_fn_t)
+ *
+ * @note The file name is automatically converted to UTF-16LE as required by exFAT.
+ * @note The file is initially read-only. Other attributes can be set after creation if needed.
+ * @note The struct must remain valid (not go out of scope) while the file is registered.
+ *
+ * @see vd_add_file()
+ * @see vd_update_file()
+ * @see vd_dynamic_file_t
+ */
 #define PICOVD_DEFINE_FILE_RUNTIME(struct_name, file_name, file_size_bytes, get_content_cb) \
     vd_dynamic_file_t struct_name = { \
         .name = STR_UTF16_EXPAND(file_name), \
@@ -59,10 +80,28 @@ typedef struct __packed {
     };
 
 // Static file structure: fixed at compile time
+typedef struct vd_static_file_s vd_static_file_t; // Opaque, see vd_exfat_dirs.h
 
-typedef struct vd_static_file_s vd_static_file_t; // Opaque static file type
-
-// Compile-time directory entries for static files
+/**
+ * @brief Define a static (compile-time) virtual file for the PicoVD virtual disk.
+ *
+ * This macro creates and initializes a vd_static_file_t structure
+ * for a file whose contents are fixed at compile time.
+ * Static files are suitable for exposing firmware images, documentation,
+ * or other data that does not change at runtime.
+ *
+ * @param struct_name      Name of the variable to define (vd_static_file_t)
+ * @param file_name_str    File name (as a string literal, e.g., "README.TXT")
+ * @param file_size_bytes  File size in bytes
+ *
+ * @note The file name is automatically converted to UTF-16LE as required by exFAT.
+ * @note The file is initially read-only. Other attributes are currently not supported.
+ *
+ * @see vd_static_file_t
+ * @see PICOVD_DEFINE_FILE_RUNTIME
+ *
+ * For usage examples, see the README.
+ */
 #define PICOVD_DEFINE_FILE_STATIC(struct_name, file_name_str, file_size_bytes) \
     const vd_static_file_t struct_name = { \
         .file_dir_entry = { \
@@ -75,7 +114,8 @@ typedef struct vd_static_file_s vd_static_file_t; // Opaque static file type
             .entry_type = exfat_entry_type_stream_extension, \
             .secondary_flags = 0x03, /* XXX */ \
             .name_length = PICOVD_UTF16_STRING_LEN(STR_UTF16_EXPAND(file_name_str)), \
-            .name_hash = exfat_dirs_compute_name_hash(STR_UTF16_EXPAND(file_name_str), PICOVD_UTF16_STRING_LEN(STR_UTF16_EXPAND(file_name_str))), \
+            .name_hash = exfat_dirs_compute_name_hash(STR_UTF16_EXPAND(file_name_str), \
+                            PICOVD_UTF16_STRING_LEN(STR_UTF16_EXPAND(file_name_str))), \
             .valid_data_length = file_size_bytes, \
             .first_cluster = 0, \
             .data_length = file_size_bytes, \
@@ -89,12 +129,52 @@ typedef struct vd_static_file_s vd_static_file_t; // Opaque static file type
 // ---------------------------------------------------------------
 // API to handle files on the virtual disk during runtime
 // ---------------------------------------------------------------
-// Add a file to the virtual disk during runtime
-// The caller must retain the vd_dynamic_file_t struct until the file is removed
+
+/**
+ * @brief Register a dynamic (runtime) file with the PicoVD virtual disk.
+ *
+ * This function adds a file defined with PICOVD_DEFINE_FILE_RUNTIME to the virtual disk,
+ * or directly as a vd_dynamic_file_t struct,
+ * making it visible to the host as part of the exFAT filesystem.
+ *
+ * Whenever the file's size or contents change, the file should be updated using vd_update_file().
+ * This informs the host that the file has changed and should be re-read.
+ *
+ * @param file Pointer to a vd_dynamic_file_t structure describing the file.
+ *
+ * @return 0 on success, negative value on error (e.g., if the requested space cannot be allocated).
+ *
+ * @note The file is initially read-only. Other attributes are currently not supported.
+ * @note The number of dynamic files is limited by PICOVD_PARAM_MAX_DYNAMIC_FILES.
+ *
+ * @see PICOVD_DEFINE_FILE_RUNTIME
+ * @see vd_update_file
+ * @see vd_dynamic_file_t
+ */
 int vd_add_file(vd_dynamic_file_t* file);
 
-// Update the size of a dynamic file on the virtual disk during runtime
-// Updates the file size and modification time
+/**
+ * @brief Update the size and modification time of a dynamic
+ *       (runtime) file on the PicoVD virtual disk.
+ *
+ * This function should be called whenever the contents or
+ * size of a registered dynamic file change.
+ * It updates the file's size and modification timestamp,
+ * and notifies the host that the file has changed.
+ *
+ * @param file Pointer to the vd_dynamic_file_t structure for the file to update.
+ * @param size_bytes New file size in bytes.
+ *
+ * @return 0 on success, negative value on error (e.g., if more space cannot be allocated).
+ *
+ * @note Only files registered with vd_add_file() can be updated.
+ *       Calling this function with a file that was not registered
+ *       with vd_add_file() is likely to cause a crash.
+ * @note The file remains read-only. Other attributes are currently not supported.
+ *
+ * @see vd_add_file
+ * @see vd_dynamic_file_t
+ */
 int vd_update_file(vd_dynamic_file_t* file, size_t size_bytes);
 
 // ---------------------------------------------------------------

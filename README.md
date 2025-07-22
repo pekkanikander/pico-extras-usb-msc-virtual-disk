@@ -86,11 +86,7 @@ Your Pico reboots and becomes visible as another USB Stick, `PicoVD`,
 allowing you to inspect the the Pico memory files.
 By default, PicoVD runs from SRAM, not changing the contents of your flash.
 
-### Using as a library in your own project
-
-**Work in progress**: TBD.
-
-## Changing file contents on the fly
+## Adding files and changing file contents on the fly
 
 By default, most operating systems cache USB MSC volume data
 and may not notice changes to a file until
@@ -135,6 +131,57 @@ picking up every update at once.
 
 Note that this will also cause a short break, as the USB device re-enumerates.
 During that break, some system calls accessing the file system may return errors.
+
+## Using as a library in your own project
+
+**Work in progress**: TBD.
+
+### Adding your own files
+
+You can add your own virtual files to the PicoVD virtual disk,
+either as static (compile-time) or dynamic (runtime) files.
+
+#### Dynamic (runtime) files
+
+Dynamic files are created and registered at runtime.
+Their contents (and optionally size) can change while the device is running.
+This is useful for exposing sensor data, logs,
+or any information that may change or be generated on demand.
+
+To define a dynamic file, use the `PICOVD_DEFINE_FILE_RUNTIME` macro and register it with `vd_add_file()`:
+
+```c
+// Define a callback to provide file content
+void my_file_content_cb(uint32_t offset, void* buf, uint32_t bufsize) {
+    // Fill buf with up to bufsize bytes starting at offset of the file
+    // For example, generate a string or copy from a buffer
+}
+
+// Define the file (e.g., "DYNAMIC.TXT" with initial size 128 bytes)
+PICOVD_DEFINE_FILE_RUNTIME(my_dynamic_file, "DYNAMIC.TXT", 128, my_file_content_cb);
+
+// Register the file at runtime (e.g., during initialization)
+vd_add_file(&my_dynamic_file);
+```
+- The `vd_dynamic_file_t` struct must remain valid while the file is registered.
+- To update the file size later, use `vd_update_file()`.
+
+#### Static (compile-time) files
+
+Static files are defined at compile time and their contents
+do not change while the device is running.
+This is useful for exposing firmware images, documentation,
+or any data that is fixed in the firmware binary.
+
+To define a static file, use the `PICOVD_DEFINE_FILE_STATIC` macro:
+
+```c
+// Define a static file (e.g., "README.TXT" with size 256 bytes)
+PICOVD_DEFINE_FILE_STATIC(my_static_file, "README.TXT", 256);
+```
+- The file is always read-only. Other file attributes are currently not supported.
+- Curently there is no clear API to provide the file contents.
+  This will be fixed in a future version.
 
 ## Design choices
 
