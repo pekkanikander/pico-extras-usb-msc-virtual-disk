@@ -1,5 +1,9 @@
 add_library(picovd INTERFACE)
 
+# Used by default as the creation time of the virtual disk files.
+string(TIMESTAMP BUILD_EPOCH "%s" UTC)
+add_compile_definitions(PICOVD_BUILD_EPOCH=${BUILD_EPOCH})
+
 target_sources(picovd INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}/vd_exfat_consts.cpp
     ${CMAKE_CURRENT_LIST_DIR}/vd_exfat_dirs.cpp

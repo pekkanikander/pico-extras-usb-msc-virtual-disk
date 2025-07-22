@@ -81,7 +81,7 @@ typedef struct __packed {
         .creat_time_sec = 0, \
         .mod_time_sec = 0, \
         .get_content = get_content_cb, \
-    };
+    }
 
 // Static file structure: fixed at compile time
 typedef struct vd_static_file_s vd_static_file_t; // Opaque, see vd_exfat_dirs.h
@@ -110,6 +110,7 @@ typedef struct vd_static_file_s vd_static_file_t; // Opaque, see vd_exfat_dirs.h
  * For usage examples, see the README.
  */
 #define PICOVD_DEFINE_FILE_STATIC(struct_name, file_name_str, file_size_bytes) \
+    static const uint32_t struct_name ## _creation_time = vd_exfat_dirs_make_timestamp(PICOVD_PARAM_STATIC_FILE_CREATION_TIME); \
     const vd_static_file_t struct_name \
     __attribute__((section("flashdata_picovd_static_directory_entries"), used, aligned(4))) = { \
         .file_dir_entry = { \
@@ -117,12 +118,15 @@ typedef struct vd_static_file_s vd_static_file_t; // Opaque, see vd_exfat_dirs.h
             .secondary_count = 2u, \
             .set_checksum = 0u, /* Computed lazily at runtime */ \
             .file_attributes = FAT_FILE_ATTR_READ_ONLY, \
+            .creat_time = struct_name ## _creation_time, \
+            .last_mod_time = struct_name ## _creation_time, \
+            .last_acc_time = struct_name ## _creation_time, \
         }, \
         .stream_extension_entry = { \
             .entry_type = exfat_entry_type_stream_extension, \
             .secondary_flags = 0x03, /* XXX */ \
             .name_length = PICOVD_UTF16_STRING_LEN(STR_UTF16_EXPAND(file_name_str)), \
-            .name_hash = exfat_dirs_compute_name_hash(STR_UTF16_EXPAND(file_name_str), \
+            .name_hash = vd_exfat_dirs_compute_name_hash(STR_UTF16_EXPAND(file_name_str), \
                             PICOVD_UTF16_STRING_LEN(STR_UTF16_EXPAND(file_name_str))), \
             .valid_data_length = file_size_bytes, \
             .first_cluster = 0, \
@@ -132,7 +136,7 @@ typedef struct vd_static_file_s vd_static_file_t; // Opaque, see vd_exfat_dirs.h
             .entry_type = exfat_entry_type_file_name, \
             .file_name = STR_UTF16_EXPAND(file_name_str), \
         }, \
-    };
+    }
 
 // ---------------------------------------------------------------
 // API to handle files on the virtual disk during runtime

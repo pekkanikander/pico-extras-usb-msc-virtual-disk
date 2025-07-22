@@ -17,7 +17,6 @@ PICOVD_DEFINE_FILE_STATIC(
 );
 #endif // PICOVD_SRAM_ENABLED
 
-
 // Compile-time directory entries for BOOTROM.BIN
 #if PICOVD_BOOTROM_ENABLED
 

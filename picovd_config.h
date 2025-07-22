@@ -13,6 +13,13 @@
 // Maximum number of dynamic files to support
 #define PICOVD_PARAM_MAX_DYNAMIC_FILES  (12)
 
+// The exFAT file creation time for compile-time defined files.
+#ifdef PICOVD_BUILD_EPOCH
+#define PICOVD_PARAM_STATIC_FILE_CREATION_TIME PICOVD_BUILD_EPOCH
+#else
+#define PICOVD_PARAM_STATIC_FILE_CREATION_TIME 1753177630 // 2025-07-22 12:27:10 UTC
+#endif
+
 #define PICOVD_UTF16_STRING_LEN(str) (sizeof(str)/sizeof(char16_t)-1) // Exclude NUL
 #define PICOVD_UTF8_STRING_LEN(str)  (sizeof(str)/sizeof(char)    -1) // Exclude NUL
 

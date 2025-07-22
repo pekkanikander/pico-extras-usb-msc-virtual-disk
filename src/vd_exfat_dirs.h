@@ -1,5 +1,6 @@
 
 #include "vd_exfat.h"
+#include <time.h>
 
 #ifndef __INTELLISENSE__
   // in real builds, expand to the C11 keyword
@@ -181,7 +182,7 @@ STATIC_ASSERT_PACKED(sizeof(exfat_root_dir_entries_dynamic_file_t) % CFG_TUD_MSC
 
 
 /// Compute the name hash for an exFAT file name.
-static constexpr inline uint16_t exfat_dirs_compute_name_hash(const char16_t *name, size_t len) {
+static constexpr inline uint16_t vd_exfat_dirs_compute_name_hash(const char16_t *name, size_t len) {
     uint16_t hash = 0;
     for (size_t i = 0; i < len; ++i) {
         char16_t wc = name[i];
@@ -193,17 +194,69 @@ static constexpr inline uint16_t exfat_dirs_compute_name_hash(const char16_t *na
     return hash;
 }
 
-/// Create an exFAT 32-bit timestamp (Table 29 §7.4.8)
-/// year: full year (>=1980), month: 1-12, day:1-31,
-/// hour:0-23, minute:0-59, second:0-59 (rounded down to even).
-static constexpr inline exfat_timestamp_t exfat_make_timestamp(
-    unsigned year,
-    unsigned month,
-    unsigned day,
-    unsigned hour,
-    unsigned minute,
-    unsigned second) {
-    if (year < 1980) year = 1980;
+// Helper functions for exFAT timestamp computation
+static constexpr inline bool vd_exfat_dirs_is_leap_year(int year) {
+    return ((year % 4 == 0) && (year % 100 != 0)) || (year % 400 == 0);
+}
+
+static constexpr inline int vd_exfat_dirs_days_in_year(int year) {
+    return 365 + vd_exfat_dirs_is_leap_year(year);
+}
+
+static constexpr inline int vd_exfat_dirs_days_in_month(int year, int month) {
+    // month: 0=Jan, ..., 11=Dec
+    if (month == 1) { // February
+        return vd_exfat_dirs_is_leap_year(year) ? 29 : 28;
+    }
+    // April, June, September, November have 30 days
+    if (month == 3 || month == 5 || month == 8 || month == 10) {
+        return 30;
+    }
+    // All others have 31 days
+    return 31;
+}
+
+static constexpr inline struct tm vd_exfat_dirs_make_tm(time_t epoch_seconds) {
+    struct tm tm = {0};
+    int days = epoch_seconds / 86400;
+    int rem  = epoch_seconds % 86400;
+
+    tm.tm_hour = rem / 3600;
+    rem = rem % 3600;
+    tm.tm_min = rem / 60;
+    tm.tm_sec = rem % 60;
+
+    // Start from 1970
+    int year = 1970;
+    for (int ydays = vd_exfat_dirs_days_in_year(year); days >= ydays; ydays = vd_exfat_dirs_days_in_year(year)) {
+        days -= ydays;
+        year++;
+    }
+    tm.tm_year = year - 1900;
+
+    // Now find the month
+    int month = 0;
+    for (int mdays = vd_exfat_dirs_days_in_month(year, month); days >= mdays; mdays = vd_exfat_dirs_days_in_month(year, month)) {
+        days -= mdays;
+        month++;
+    }
+    tm.tm_mon = month;
+    tm.tm_mday = days + 1;
+
+    return tm;
+}
+
+/// Create an exFAT 32-bit timestamp from Unix epoch seconds (Table 29 §7.4.8)
+static constexpr inline exfat_timestamp_t vd_exfat_dirs_make_timestamp(time_t epoch_seconds) {
+    // exFAT timestamp fields: year (>=1980), month: 1-12, day:1-31, hour:0-23, minute:0-59, second:0-59 (rounded down to even)
+    const struct tm tm = vd_exfat_dirs_make_tm(epoch_seconds);
+
+    const unsigned year   = (tm.tm_year + 1900) < 1980 ? 1980 : (tm.tm_year + 1900);
+    const unsigned month  = tm.tm_mon + 1;
+    const unsigned day    = tm.tm_mday;
+    const unsigned hour   = tm.tm_hour;
+    const unsigned minute = tm.tm_min;
+    const unsigned second = tm.tm_sec;
     return ((year - 1980)   & 0x7F) << 25
          | (month           & 0x0F) << 21
          | (day             & 0x1F) << 16
@@ -223,21 +276,6 @@ extern "C" {
 int vd_exfat_dir_add_file(vd_dynamic_file_t* file); // >= 0 if success, -1 if error
 int vd_exfat_dir_update_file(vd_dynamic_file_t* file);    // >= 0 if success, -1 if error
 
-// First root directory entries, pre-constructed, in vd_exfat_consts.cpp
-extern const exfat_root_dir_entries_first_t exfat_root_dir_first_entries_data;
-
-// Directory entries for SRAM.BIN, pre-constructed
-extern const vd_static_file_t exfat_root_dir_sram_file_data;
-
-// Directory entries for BOOTROM.BIN, pre-constructed
-extern const vd_static_file_t exfat_root_dir_bootrom_file_data;
-
-// Directory entries for FLASH.BIN, pre-constructed
-extern const vd_static_file_t exfat_root_dir_flash_file_data;
-
-extern uint16_t exfat_dirs_compute_setchecksum(const uint8_t *entries, size_t len);
-
 #ifdef __cplusplus
 }
 #endif
-

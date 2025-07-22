@@ -186,7 +186,7 @@ static size_t dynamic_file_count = 0;
 int vd_exfat_dir_add_file(vd_dynamic_file_t* file) {
     if (dynamic_file_count >= PICOVD_PARAM_MAX_DYNAMIC_FILES) return -1;
     dynamic_files[dynamic_file_count].file      = file;
-    dynamic_files[dynamic_file_count].name_hash = exfat_dirs_compute_name_hash(file->name, file->name_length);
+    dynamic_files[dynamic_file_count].name_hash = vd_exfat_dirs_compute_name_hash(file->name, file->name_length);
     vd_exfat_dir_update_file(file);
     return (int)dynamic_file_count++;
 }
@@ -225,22 +225,10 @@ static bool build_file_entry_set(const vd_dynamic_file_t *file, exfat_root_dir_e
 
     // Set timestamps (convert from time_t to exFAT format)
     // For now, use fixed date/time if not set
-    const time_t t = file->creat_time_sec;
-    struct tm tm;
-    gmtime_r(&t, &tm);
-    const uint32_t creat_timestamp = exfat_make_timestamp(
-        tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
-        tm.tm_hour, tm.tm_min, tm.tm_sec);
-    des->file_directory.creat_time    = creat_timestamp;
+    des->file_directory.creat_time = vd_exfat_dirs_make_timestamp(file->creat_time_sec);
     // Use the file's modification time for last_mod_time, not creation time
-    const time_t mod_t = file->mod_time_sec;
-    struct tm mod_tm;
-    gmtime_r(&mod_t, &mod_tm);
-    const uint32_t mod_timestamp = exfat_make_timestamp(
-        mod_tm.tm_year + 1900, mod_tm.tm_mon + 1, mod_tm.tm_mday,
-        mod_tm.tm_hour, mod_tm.tm_min, mod_tm.tm_sec);
-    des->file_directory.last_mod_time = mod_timestamp;
-    des->file_directory.last_acc_time = mod_timestamp;
+    des->file_directory.last_mod_time = vd_exfat_dirs_make_timestamp(file->mod_time_sec);
+    des->file_directory.last_acc_time = vd_exfat_dirs_make_timestamp(file->mod_time_sec);
     des->file_directory.creat_time_off    = exfat_utc_offset_UTC;
     des->file_directory.last_mod_time_off = exfat_utc_offset_UTC;
     des->file_directory.last_acc_time_off = exfat_utc_offset_UTC;
@@ -252,7 +240,7 @@ static bool build_file_entry_set(const vd_dynamic_file_t *file, exfat_root_dir_e
     des->stream_extension.valid_data_length = file->size_bytes;
     des->stream_extension.data_length = file->size_bytes;
     des->stream_extension.first_cluster = file->first_cluster;
-    des->stream_extension.name_hash = exfat_dirs_compute_name_hash(file->name, file->name_length);
+    des->stream_extension.name_hash = vd_exfat_dirs_compute_name_hash(file->name, file->name_length);
 
     // (3) Prepare the file name entries (only one for now)
     des->file_name[0].entry_type = exfat_entry_type_file_name;
