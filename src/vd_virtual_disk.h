@@ -32,8 +32,9 @@ typedef void (*vd_file_sector_get_fn_t)(uint32_t offset, void* buf, uint32_t buf
 // ---------------------------------------------------------------
 // Virtual Disk File Structures
 // ---------------------------------------------------------------
+
 #ifndef STR_UTF16_EXPAND
-#define STR_UTF16_EXPAND(x) u ## #x
+#define STR_UTF16_EXPAND(x) u ## x
 #endif
 
 // Dynamic file structure: may be changed at runtime
@@ -70,10 +71,10 @@ typedef struct __packed {
  * @see vd_update_file()
  * @see vd_dynamic_file_t
  */
-#define PICOVD_DEFINE_FILE_RUNTIME(struct_name, file_name, file_size_bytes, get_content_cb) \
+#define PICOVD_DEFINE_FILE_RUNTIME(struct_name, file_name_str, file_size_bytes, get_content_cb) \
     vd_dynamic_file_t struct_name = { \
-        .name = STR_UTF16_EXPAND(file_name), \
-        .name_length = (sizeof(file_name) / sizeof(char16_t)) - 1, \
+        .name = STR_UTF16_EXPAND(file_name_str), \
+        .name_length = PICOVD_UTF16_STRING_LEN(STR_UTF16_EXPAND(file_name_str)), \
         .file_attributes = FAT_FILE_ATTR_READ_ONLY, \
         .first_cluster = 0, \
         .size_bytes = file_size_bytes, \
@@ -106,7 +107,8 @@ typedef struct vd_static_file_s vd_static_file_t; // Opaque, see vd_exfat_dirs.h
  * For usage examples, see the README.
  */
 #define PICOVD_DEFINE_FILE_STATIC(struct_name, file_name_str, file_size_bytes) \
-    const vd_static_file_t struct_name = { \
+    const vd_static_file_t struct_name \
+    __attribute__((section("flashdata_picovd_static_directory_entries"), used, aligned(4))) = { \
         .file_dir_entry = { \
             .entry_type = exfat_entry_type_file_directory, \
             .secondary_count = 2u, \

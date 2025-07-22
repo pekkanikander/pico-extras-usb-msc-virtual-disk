@@ -36,6 +36,8 @@ uint16_t exfat_dirs_compute_setchecksum(const uint8_t *entries, size_t len) {
 
 // ---------------------------------------------------------------------------
 // Directory entry sets for the root directory.
+
+// XXX FIXME: Outdated below.
 //
 // The SetChecksums computed lazily the first time an entry set
 //
@@ -54,6 +56,12 @@ uint16_t exfat_dirs_compute_setchecksum(const uint8_t *entries, size_t len) {
 // of a few tens at most, having this whole table in SRAM takes at most
 // a few hundred bytes.
 // ---------------------------------------------------------------------------
+
+// Provided by the linker.
+extern const vd_static_file_t __start_flashdata_picovd_static_directory_entries[];
+extern const vd_static_file_t __stop_flashdata_picovd_static_directory_entries[];
+
+#if 0
 static struct {
     const uint8_t * entries;  ///< Pointer to the entry set buffer, in code
     // XXX RECONSIDER: We could store an uint8_t of how many entries in a set, reducing the memory consumption a bit
@@ -79,6 +87,8 @@ static_assert(sizeof(exfat_root_dir_first_entries_data)
             + sizeof(exfat_root_dir_flash_file_data)
             <= EXFAT_BYTES_PER_SECTOR,
               "Compile time root directory entries must fit into a single sector");
+#endif
+
 
 // ---------------------------------------------------------------------------
 // Generate a slice of a root directory sector, as requested by the MSC layer.
@@ -91,18 +101,14 @@ void exfat_generate_root_dir_fixed_sector(uint32_t __unused lba, uint32_t offset
     size_t   len = bufsize;           // Remaining bytes to copy
     size_t   idx = 0;                 // Current index within the sector
 
-    for (size_t i = 0; i < sizeof(exfat_root_dir_entries) / sizeof(exfat_root_dir_entries[0]); i++) {
-        const uint8_t * entries_data = exfat_root_dir_entries[i].entries;
-        const size_t    entries_len  = exfat_root_dir_entries[i].entries_length;
+    const vd_static_file_t *begin = __start_flashdata_picovd_static_directory_entries;
+    const vd_static_file_t *end   = __stop_flashdata_picovd_static_directory_entries;
 
-        // Step 1: Entries preparation, if not already prepared
-        if (!exfat_root_dir_entries[i].checksum_computed) {
-            // Compute checksum for the current entry
-            exfat_root_dir_entries[i].checksum
-              = exfat_dirs_compute_setchecksum(entries_data, entries_len);
-            exfat_root_dir_entries[i].checksum_computed = true;
-        }
-        const uint16_t checksum = exfat_root_dir_entries[i].checksum;
+    for (const vd_static_file_t *f = begin; f < end; ++f) {
+        // Each vd_static_file_t contains a file_dir_entry, stream_extension_entry, and file_name_entry
+        // We treat the struct as a contiguous entry set
+        const uint8_t *entries_data = (const uint8_t *)f;
+        const size_t   entries_len  = sizeof(vd_static_file_t);
 
         // Step 2: If the requested slice is after the current entries, skip to next ones
         if (offset >= idx + entries_len) {
@@ -110,7 +116,7 @@ void exfat_generate_root_dir_fixed_sector(uint32_t __unused lba, uint32_t offset
             continue;
         }
 
-        // Phase 3: Copy data from the current entries to the buffer
+        // Copy data from the current entries to the buffer
         // If some part of the entries falls before the requested slice,
         // start copying only at within the entries as needed.
         // We have copied idx bytes so far. Hence, the offset within the entries
@@ -126,10 +132,14 @@ void exfat_generate_root_dir_fixed_sector(uint32_t __unused lba, uint32_t offset
 
         memcpy(buf, copy_from, copy_len);
 
-        // Phase 3: Place the SetChecksum, if needed and if it is part of the copied data,
+        // Place the SetChecksum, if needed and if it is part of the copied data,
         // at indices 2 and 3 as measured from the beginning of the entries
         if (entries_data[0] == exfat_entry_type_file_directory ||
             entries_data[0] == exfat_entry_type_volume_guid) {
+            // Compute checksum for the current entry set
+            const uint16_t checksum = exfat_dirs_compute_setchecksum(entries_data, entries_len);
+            // TODO: Precompute and store checksum at build time in the future
+
             if (entries_offset <= 2 && copy_len > 2 - entries_offset) {
                 buf[2 - entries_offset] =  checksum       & 0xFF;
             }
@@ -138,7 +148,7 @@ void exfat_generate_root_dir_fixed_sector(uint32_t __unused lba, uint32_t offset
             }
         }
 
-        // Phase 4: Advance for the next entry (if any)
+        // Advance for the next entry (if any)
         buf += copy_len;
         len -= copy_len;
         idx += entries_offset + copy_len;
@@ -204,7 +214,6 @@ _Static_assert(sizeof(exfat_root_dir_entries_dynamic_file_t) % CFG_TUD_MSC_EP_BU
               "Dynamic entry-set must be a multiple of MSC EP buffer size");
 #endif
 
-// Change build_file_entry_set to take a vd_file_t pointer directly
 static bool build_file_entry_set(const vd_dynamic_file_t *file, exfat_root_dir_entries_dynamic_file_t *des) {
     assert(file != NULL);
     memset(des, 0x00, sizeof(*des));

@@ -14,7 +14,7 @@ static constexpr uint32_t ror32(uint32_t x) {
 }
 
 
-/* 
+/*
  * Minimal exFAT Upcase table
  * See Microsoft spec §7.2 "Up-case Table Directory Entry" (Table 24)
  */
@@ -27,7 +27,7 @@ extern "C" constexpr uint16_t exfat_upcase_table[] = {
     0xFFFF, 'a',
 
     // 2) Explicit mappings for 'a'...'z' -> 'A'...'Z'
-    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 
+    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
     'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
     'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X',
     'Y', 'Z',
@@ -316,21 +316,24 @@ _Static_assert(exfat_fat0_sector_data_len <= 512,
 // These entries should be in vd_exfat_dirs.c, but they need exfat_upcase_table_checksum
 // and exfat_upcase_table_len to be constexpr, which are defined here.
 // ---------------------------------------------------------------------------
-static constexpr exfat_volume_label_dir_entry_t volume_label_entry = {
+static constexpr exfat_volume_label_dir_entry_t volume_label_entry
+    __attribute__((section("flashdata_picovd_static_directory_entries"), used, aligned(4))) = {
     .entry_type   = exfat_entry_type_volume_label,
     .char_count   = EXFAT_VOLUME_LABEL_LENGTH,
     .volume_label = PICOVD_VOLUME_LABEL_UTF16,
     // reserved[8] are zero-initialized
 };
 
-static constexpr exfat_allocation_bitmap_dir_entry_t allocation_bitmap_entry = {
+static constexpr exfat_allocation_bitmap_dir_entry_t allocation_bitmap_entry
+    __attribute__((section("flashdata_picovd_static_directory_entries"), used, aligned(4))) = {
     .entry_type    = exfat_entry_type_allocation_bitmap,
     .bitmap_flags  = 0,
     .first_cluster = EXFAT_ALLOCATION_BITMAP_START_CLUSTER,
     .data_length   = static_cast<uint64_t>(EXFAT_ALLOCATION_BITMAP_LENGTH_SECTORS) * EXFAT_BYTES_PER_SECTOR,
 };
 
-static constexpr exfat_upcase_table_dir_entry_t upcase_table_entry = {
+static constexpr exfat_upcase_table_dir_entry_t upcase_table_entry
+    __attribute__((section("flashdata_picovd_static_directory_entries"), used, aligned(4))) = {
     .entry_type     = exfat_entry_type_upcase_table,
     .table_checksum = exfat_upcase_table_checksum,  // now uint32_t
     .first_cluster  = EXFAT_UPCASE_TABLE_START_CLUSTER,
@@ -339,10 +342,4 @@ static constexpr exfat_upcase_table_dir_entry_t upcase_table_entry = {
 #else
     .data_length    = EXFAT_UPCASE_TABLE_LENGTH_CLUSTERS * EXFAT_BYTES_PER_SECTOR * EXFAT_SECTORS_PER_CLUSTER,
 #endif
-};
-
-extern "C" constexpr exfat_root_dir_entries_first_t exfat_root_dir_first_entries_data = {
-  volume_label_entry,
-  allocation_bitmap_entry,
-  upcase_table_entry,
 };

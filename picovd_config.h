@@ -19,7 +19,7 @@
 // Add support for SRAM file
 // This will enable the generation of a file named "SRAM.BIN" in the exFAT filesystem.
 #define PICOVD_SRAM_ENABLED             (1)
-#define PICOVD_SRAM_FILE_NAME           u"SRAM.BIN"
+#define PICOVD_SRAM_FILE_NAME           "SRAM.BIN"
 #define PICOVD_SRAM_FILE_NAME_LEN       PICOVD_UTF16_STRING_LEN(PICOVD_SRAM_FILE_NAME)
 #define PICOVD_SRAM_SIZE_BYTES          (0x42000) // 264 KiB
 #define PICOVD_SRAM_START_CLUSTER       (0x1F000) // See ExFAT-design.md
@@ -29,7 +29,7 @@
 // This will enable the generation of a file named "BOOTROM.BIN" in the exFAT filesystem.
 // The file will be generated from the contents of the Boot ROM segment on the RP2530.
 #define PICOVD_BOOTROM_ENABLED          (1)
-#define PICOVD_BOOTROM_FILE_NAME        u"BOOTROM.BIN"
+#define PICOVD_BOOTROM_FILE_NAME        "BOOTROM.BIN"
 #define PICOVD_BOOTROM_FILE_NAME_LEN    PICOVD_UTF16_STRING_LEN(PICOVD_BOOTROM_FILE_NAME)
 #define PICOVD_BOOTROM_SIZE_BYTES       (0x8000) // 32 KiB
 #define PICOVD_BOOTROM_START_CLUSTER    (0xE000) // Within the free cluster range
@@ -39,7 +39,7 @@
 // This will enable the generation of a file named "FLASH.BIN" in the exFAT filesystem.
 // The file will be generated from the contents of the Flash segment on the RP2530
 #define PICOVD_FLASH_ENABLED            (1)
-#define PICOVD_FLASH_FILE_NAME          u"FLASH.BIN"
+#define PICOVD_FLASH_FILE_NAME          "FLASH.BIN"
 #define PICOVD_FLASH_FILE_NAME_LEN      PICOVD_UTF16_STRING_LEN(PICOVD_FLASH_FILE_NAME)
 #define PICOVD_FLASH_SIZE_BYTES         (0x200000) // 2 Mb
 #define PICOVD_FLASH_START_CLUSTER      (0xF000) // See ExFAT-design.md
@@ -54,13 +54,13 @@
 #define PICOVD_BOOTROM_PARTITIONS_FILE_NAME_BASE     "PARTx.BIN" // UTF-8
 #define PICOVD_BOOTROM_PARTITIONS_FILE_NAME_N_IDX    5u // Index of placeholder 'x' in the name
 #define PICOVD_BOOTROM_PARTITIONS_FILE_NAME_LEN      PICOVD_UTF8_STRING_LEN(PICOVD_BOOTROM_PARTITIONS_FILE_NAME_BASE)
-_Static_assert(PICOVD_BOOTROM_PARTITIONS_FILE_NAME_N_IDX < PICOVD_BOOTROM_PARTITIONS_FILE_NAME_LEN, 
+_Static_assert(PICOVD_BOOTROM_PARTITIONS_FILE_NAME_N_IDX < PICOVD_BOOTROM_PARTITIONS_FILE_NAME_LEN,
     "PICOVD_BOOTROM_PARTITIONS_FILE_NAME_N_IDX must be within the name");
 
 // Add support for a constantly changing file, to test the host's ability to re-read the disk contents
-// This will enable the generation of a file named "CHANGING.TXt" in the exFAT filesystem.
+// This will enable the generation of a file named "CHANGING.TXT" in the exFAT filesystem.
 #define PICOVD_CHANGING_FILE_ENABLED    (1)
-#define PICOVD_CHANGING_FILE_NAME       u"CHANGING.TXT"
+#define PICOVD_CHANGING_FILE_NAME       "CHANGING.TXT"
 #define PICOVD_CHANGING_FILE_NAME_LEN   PICOVD_UTF16_STRING_LEN(PICOVD_CHANGING_FILE_NAME)
 #define PICOVD_CHANGING_FILE_SIZE_BYTES (512) // XXX FIXME
 

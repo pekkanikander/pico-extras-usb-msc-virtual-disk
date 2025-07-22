@@ -87,6 +87,59 @@ def _compute_entry_set_checksum(data: bytearray, primary_offset: int, entry_coun
 # The actual test
 # ---------------------------------------------------------------------------
 
+import struct
+
+INVALID_FILENAME_CODES = set(range(0x00, 0x21)) | {0x22, 0x2A, 0x2F, 0x3A, 0x3C, 0x3E, 0x3F, 0x5C, 0x7C}
+
+def _extract_and_check_filename(data, offset, entry_types, total_entries_in_set):
+    # Find the Stream Extension entry (should be at index 1)
+    stream_ext_offset = offset + 32
+    name_length = data[stream_ext_offset + 3]  # NameLength is at offset 3 in Stream Extension
+    assert 1 <= name_length <= 255, f"Invalid NameLength: {name_length}"
+
+    # Collect all File Name entries (0xC1)
+    file_name_entries = [
+        offset + 32 * i for i, et in enumerate(entry_types) if et == 0xC1
+    ]
+    # Each File Name entry holds 15 UTF-16LE code units (30 bytes)
+    code_units = []
+    for entry_offset in file_name_entries:
+        for i in range(15):
+            code_unit = struct.unpack_from('<H', data, entry_offset + 2 + i*2)[0]
+            code_units.append(code_unit)
+    # Only use NameLength code units
+    code_units = code_units[:name_length]
+
+    # Check for invalid characters
+    for cu in code_units:
+        if cu in INVALID_FILENAME_CODES:
+            # Print the full code unit list and attempted decoded name for debugging
+            try:
+                name_bytes = b''.join(struct.pack('<H', c) for c in code_units)
+                decoded = name_bytes.decode('utf-16le')
+            except Exception:
+                decoded = '<decode error>'
+            print(f"File name code units: {[f'{c:#06x}' for c in code_units]}")
+            print(f"Attempted decoded name: {decoded!r}")
+            assert cu not in INVALID_FILENAME_CODES, f"Invalid code unit in file name: {cu:#06x}"
+
+    # Check for "." or ".."
+    try:
+        name = bytes()
+        for cu in code_units:
+            name += struct.pack('<H', cu)
+        decoded = name.decode('utf-16le')
+        assert decoded not in ('.', '..'), f"Illegal file name: {decoded!r}"
+    except UnicodeDecodeError:
+        assert False, "File name is not valid UTF-16LE"
+
+    # Optionally, check for trailing 0x0000 in unused code units
+    for cu in code_units[name_length:]:
+        assert cu == 0x0000, "Unused code units must be 0x0000"
+
+    return decoded
+
+
 def test_exfat_root_dir_file_entry_sets(bootsector_data, read_raw_sector):
     """
     Iterate over every 32-byte directory entry in the first root-directory
@@ -171,6 +224,9 @@ def test_exfat_root_dir_file_entry_sets(bootsector_data, read_raw_sector):
                 f"0x85 entry at {offset}: EntrySetChecksum mismatch; "
                 f"stored={stored_checksum:#06x}, computed={computed_checksum:#06x}"
             )
+
+            # 7) Check file name validity per exFAT spec
+            _extract_and_check_filename(data, offset, entry_types, total_entries_in_set)
 
             # All good — advance past the entire entry set
             offset = set_end_offset
