@@ -32,6 +32,9 @@ typedef void (*vd_file_sector_get_fn_t)(uint32_t offset, void* buf, uint32_t buf
 // ---------------------------------------------------------------
 // Virtual Disk File Structures
 // ---------------------------------------------------------------
+#ifndef STR_UTF16_EXPAND
+#define STR_UTF16_EXPAND(x) u ## #x
+#endif
 
 // Dynamic file structure: may be changed at runtime
 typedef struct __packed {
