@@ -35,7 +35,7 @@ static size_t   dynamic_cluster_map_count = 0;
 // Dynamic cluster map entry: maps a cluster range to a handler
 typedef struct {
     uint32_t first_cluster;
-    size_t   file_size_bytes;
+    size_t   max_file_size_bytes;
     void   (*handler)(uint32_t file_offset, void* buf, uint32_t bufsize);
 } dynamic_cluster_map_entry_t;
 
@@ -62,10 +62,28 @@ static uint32_t vd_dynamic_cluster_alloc(size_t region_size_bytes, void (*handle
 
     dynamic_cluster_map[dynamic_cluster_map_count++] = (dynamic_cluster_map_entry_t){
         .first_cluster = allocated_cluster,
-        .file_size_bytes = region_size_bytes,
+        .max_file_size_bytes = region_size_bytes,
         .handler = handler,
     };
     return allocated_cluster;
+}
+
+// Reallocate clusters for a dynamic file if its size increases
+static int vd_dynamic_cluster_realloc(vd_dynamic_file_t *file, size_t size_bytes) {
+    // Find the file's entry in the dynamic_cluster_map
+    size_t i;
+    for (i = 0; i < dynamic_cluster_map_count; ++i) {
+        if (dynamic_cluster_map[i].first_cluster == file->first_cluster) {
+            break;
+        }
+    }
+    if (i == dynamic_cluster_map_count) {
+        return -1;
+    }
+    if (size_bytes > dynamic_cluster_map[i].max_file_size_bytes) {
+        return -2;
+    }
+    return 0;
 }
 
 
@@ -399,15 +417,15 @@ static void vd_dynamic_area_handler(uint32_t lba, uint32_t offset, void* buf, ui
     uint32_t cluster_offset = (lba % EXFAT_SECTORS_PER_CLUSTER) * EXFAT_BYTES_PER_SECTOR + offset;
     for (size_t i = 0; i < dynamic_cluster_map_count; ++i) {
         const dynamic_cluster_map_entry_t* entry = &dynamic_cluster_map[i];
-        size_t clusters_allocated = (entry->file_size_bytes + (EXFAT_BYTES_PER_SECTOR * EXFAT_SECTORS_PER_CLUSTER) - 1) / (EXFAT_BYTES_PER_SECTOR * EXFAT_SECTORS_PER_CLUSTER);
+        size_t clusters_allocated = (entry->max_file_size_bytes + (EXFAT_BYTES_PER_SECTOR * EXFAT_SECTORS_PER_CLUSTER) - 1) / (EXFAT_BYTES_PER_SECTOR * EXFAT_SECTORS_PER_CLUSTER);
         if (cluster >= entry->first_cluster && cluster < entry->first_cluster + clusters_allocated) {
             // Compute file-relative offset
             uint32_t file_offset = (cluster - entry->first_cluster) * (EXFAT_BYTES_PER_SECTOR * EXFAT_SECTORS_PER_CLUSTER) + cluster_offset;
             // Clamp to file size
-            if (file_offset < entry->file_size_bytes) {
+            if (file_offset < entry->max_file_size_bytes) {
                 size_t to_copy = bufsize;
-                if (file_offset + to_copy > entry->file_size_bytes) {
-                    to_copy = entry->file_size_bytes - file_offset;
+                if (file_offset + to_copy > entry->max_file_size_bytes) {
+                    to_copy = entry->max_file_size_bytes - file_offset;
                 }
                 entry->handler(file_offset, buf, to_copy);
                 if (to_copy < bufsize) {
@@ -444,10 +462,10 @@ int32_t vd_virtual_disk_read(uint32_t lba,
     return bufsize;
 }
 
-int vd_add_file(vd_dynamic_file_t* file) {
+int vd_add_file(vd_dynamic_file_t* file, size_t max_size_bytes) {
     // If the file has no first cluster defined, allocate cluster chain
     if (file->first_cluster == 0) {
-        file->first_cluster = vd_dynamic_cluster_alloc(file->size_bytes, file->get_content);
+        file->first_cluster = vd_dynamic_cluster_alloc(max_size_bytes, file->get_content);
         if (file->first_cluster == 0) {
             return -1;
         }
@@ -458,18 +476,9 @@ int vd_add_file(vd_dynamic_file_t* file) {
 
 int vd_update_file(vd_dynamic_file_t *file, size_t size_bytes) {
     if (size_bytes > file->size_bytes) {
-        const int32_t cluster_size_bytes = EXFAT_BYTES_PER_SECTOR * EXFAT_SECTORS_PER_CLUSTER;
-        const int32_t clusters_needed    = (      size_bytes + cluster_size_bytes - 1) / cluster_size_bytes;
-        const int32_t clusters_allocated = (file->size_bytes + cluster_size_bytes - 1) / cluster_size_bytes;
-        const int32_t clusters_to_add    = clusters_needed - clusters_allocated;
-        if (clusters_to_add > 0) {
-            if (file->first_cluster + clusters_allocated == dynamic_cluster_map_next_cluster &&
-                dynamic_cluster_map_next_cluster + clusters_to_add <= PICOVD_DYNAMIC_AREA_END_CLUSTER) {
-                // We are at the end of the dynamic cluster map and we can allocate new clusters.
-                dynamic_cluster_map_next_cluster += clusters_to_add;
-            } else {
-                return -1;
-            }
+        int rc = vd_dynamic_cluster_realloc(file, size_bytes);
+        if (rc < 0) {
+            return rc;
         }
     }
     file->size_bytes = size_bytes;

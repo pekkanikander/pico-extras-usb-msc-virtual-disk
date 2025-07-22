@@ -37,6 +37,6 @@ PICOVD_DEFINE_FILE_RUNTIME(
 // Initialization function to register the file at runtime
 void vd_files_changing_init(void) {
 #if PICOVD_CHANGING_FILE_ENABLED
-    vd_add_file(&changing_file);
+    vd_add_file(&changing_file, PICOVD_CHANGING_FILE_SIZE_BYTES);
 #endif
 }

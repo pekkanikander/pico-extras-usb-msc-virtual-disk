@@ -133,25 +133,30 @@ typedef struct vd_static_file_s vd_static_file_t; // Opaque, see vd_exfat_dirs.h
 /**
  * @brief Register a dynamic (runtime) file with the PicoVD virtual disk.
  *
- * This function adds a file defined with PICOVD_DEFINE_FILE_RUNTIME to the virtual disk,
- * or directly as a vd_dynamic_file_t struct,
- * making it visible to the host as part of the exFAT filesystem.
+ * This function adds a file defined with PICOVD_DEFINE_FILE_RUNTIME (or a manually constructed
+ * vd_dynamic_file_t struct) to the virtual disk, making it visible to the host as part of the exFAT filesystem.
+ *
+ * The file's cluster allocation is based on max_size_bytes, which sets the maximum size the file
+ * may grow to at runtime. This allows the file's length to change dynamically (up to the reserved space).
  *
  * Whenever the file's size or contents change, the file should be updated using vd_update_file().
  * This informs the host that the file has changed and should be re-read.
  *
  * @param file Pointer to a vd_dynamic_file_t structure describing the file.
+ * @param max_size_bytes Maximum file size (in bytes) that may be allocated for this file at runtime.
+ *                      The file's cluster chain is allocated to cover this size.
  *
  * @return 0 on success, negative value on error (e.g., if the requested space cannot be allocated).
  *
  * @note The file is initially read-only. Other attributes are currently not supported.
  * @note The number of dynamic files is limited by PICOVD_PARAM_MAX_DYNAMIC_FILES.
+ * @note The vd_dynamic_file_t struct must remain valid while the file is registered.
  *
  * @see PICOVD_DEFINE_FILE_RUNTIME
  * @see vd_update_file
  * @see vd_dynamic_file_t
  */
-int vd_add_file(vd_dynamic_file_t* file);
+int vd_add_file(vd_dynamic_file_t* file, size_t max_size_bytes);
 
 /**
  * @brief Update the size and modification time of a dynamic
