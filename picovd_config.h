@@ -10,6 +10,9 @@
 
 #define PICOVD_VOLUME_LABEL_UTF16       u"PicoVD"
 
+// SCSI INQUIRY vendor identification (8 bytes, SCSI standard)
+#define PICOVD_MSC_VENDOR_ID            "PicoVD  "
+
 // Maximum number of dynamic files to support
 #define PICOVD_PARAM_MAX_DYNAMIC_FILES  (12)
 
