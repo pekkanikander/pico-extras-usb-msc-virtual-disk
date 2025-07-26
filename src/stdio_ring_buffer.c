@@ -7,16 +7,9 @@
 
 #include "stdio_ring_buffer.h"
 
-typedef struct {
-    uint8_t *const beg; ///< Beginning of the ring buffer
-    uint8_t *const end; ///< End of the ring buffer
-    uint8_t *      ptr; ///< Current writing position
-    size_t         tot; ///< Total bytes written
-} ring_buffer_t;
-
 static uint8_t stdio_ring_buffer_data[PICO_STDIO_RING_BUFFER_LEN];
 
-static ring_buffer_t stdio_ring_buffer_rb = {
+ring_buffer_t stdio_ring_buffer_rb = {
     .beg = stdio_ring_buffer_data,
     .end = stdio_ring_buffer_data + PICO_STDIO_RING_BUFFER_LEN,
     .ptr = stdio_ring_buffer_data,
@@ -28,7 +21,7 @@ static mutex_t stdio_ring_buffer_mutex;
 static inline void ring_buffer_assert(const ring_buffer_t *const rb) {
     assert(rb->beg <= rb->ptr);
     assert(rb->ptr < rb->end);
-    assert(rb->tot % (rb->end - rb->beg) == rb->ptr - rb->beg);
+    assert(rb->tot % ring_buffer_capacity(rb) == rb->ptr - rb->beg);
 }
 
 // Returns # actually stored, if # < len, then some were discarded
@@ -39,7 +32,7 @@ static size_t ring_buffer_write(ring_buffer_t *const rb, const uint8_t *buf, siz
     rb->tot += len;
 
     // capacity of the buffer
-    const size_t capacity = rb->end - rb->beg;
+    const size_t capacity = ring_buffer_capacity(rb);
 
     // If the write is larger than the buffer, only keep the *last* 'capacity' bytes:
     if (len > capacity) {
@@ -74,13 +67,16 @@ static size_t ring_buffer_write(ring_buffer_t *const rb, const uint8_t *buf, siz
     }
 
     ring_buffer_assert(rb);
+    if (rb->notify_write_cb) {
+        rb->notify_write_cb(rb, len, rb->tot);
+    }
     return len;
 }
 
 static size_t ring_buffer_get(const ring_buffer_t *const rb, size_t offset, uint8_t *buf, size_t len) {
     ring_buffer_assert(rb);
 
-    const size_t capacity = rb->end - rb->beg;
+    const size_t capacity = ring_buffer_capacity(rb);
     const size_t start_offset = (rb->tot > capacity) ? (rb->tot - capacity) : 0;
     const size_t end_offset = rb->tot;
 
@@ -134,7 +130,8 @@ stdio_driver_t stdio_ring_buffer = {
     .in_chars  = stdio_ring_buffer_in_chars,
 };
 
-bool stdio_ring_buffer_init(void) {
+bool stdio_ring_buffer_init(ring_buffer_notify_write_cb_t notify_write_cb) {
+    stdio_ring_buffer_rb.notify_write_cb = notify_write_cb;
     if (!mutex_is_initialized(&stdio_ring_buffer_mutex)) {
         mutex_init(&stdio_ring_buffer_mutex);
     }

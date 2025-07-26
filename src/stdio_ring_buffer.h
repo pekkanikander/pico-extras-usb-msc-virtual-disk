@@ -7,6 +7,24 @@
 
 #include "pico/stdio.h"
 
+typedef struct ring_buffer_s ring_buffer_t;
+
+typedef void (*ring_buffer_notify_write_cb_t)(struct ring_buffer_s *const rb, size_t bytes_written, size_t total_bytes_written);
+struct ring_buffer_s {
+    uint8_t *const beg; ///< Beginning of the ring buffer
+    uint8_t *const end; ///< End of the ring buffer
+    uint8_t *      ptr; ///< Current writing position
+    size_t         tot; ///< Total bytes written
+    ring_buffer_notify_write_cb_t notify_write_cb; ///< Callback on writes
+};
+
+static inline size_t ring_buffer_capacity(const ring_buffer_t *const rb) {
+    return rb->end - rb->beg;
+}
+
+static inline size_t ring_buffer_total_written(const ring_buffer_t *const rb) {
+    return rb->tot;
+}
 
 
 /** \brief Support for stdout to a SRAM ring buffer
@@ -34,6 +52,8 @@
 extern "C" {
 #endif
 
+extern ring_buffer_t stdio_ring_buffer_rb;
+
 extern stdio_driver_t stdio_ring_buffer;
 
 /*! \brief Explicitly initialize Ring Buffer stdio and
@@ -42,7 +62,7 @@ extern stdio_driver_t stdio_ring_buffer;
  *
  *  \return true always
  */
-bool stdio_ring_buffer_init(void);
+bool stdio_ring_buffer_init(ring_buffer_notify_write_cb_t notify_write_cb);
 
 /*! \brief Explicitly deinitialize Ring Buffer stdio and
            remove it from the current set of stdin drivers
