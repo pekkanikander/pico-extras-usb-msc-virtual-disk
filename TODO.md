@@ -1,20 +1,8 @@
 # Major bugs
 
-* Fix TinyUSB version and callback mess
-* Fix the occasional (rare) USB Panic
-```
-    WARN: starting new transfer on already active ep 83
-    *** PANIC ***
-    ep 83 was already available
-```
+Currently no known major bugs
 
 # Known minor bugs
-
-* Go carefully through TinyUSB MSC callback layer.
-  Currently hacky and maybe faulty for some SCSI commands.
-  * in tud_msc_scsi_cb don't return error on default, maybe we should?
-  * we handle some commands in tud_msc_scsi_pre_cb in some cases, but fail to
-    handle them in tud_msc_scsi_cb if they default driver doesn't handle them.
 
 * Add dynamic name allocation for long partition names. Now they fail with printf.
 
@@ -25,7 +13,8 @@
 # Optimizations to be done
 
 * Refactor vd_virtual_disk.c into 2-3 files
-* Rewrite / optimise LBA handling table
+* Check if there are layering violations and fix them, if easy
+  * Check UA 0x28 delays, now in many layers, replace with an API?
 
 * Cleanup TinyUSB MSC integration, once stabilised
 
@@ -34,9 +23,11 @@
 
 # Features
 
+* Add static file handler API
+  * Rewrite / optimise LBA handling table for the static file handler APi
+
 * Use compile time as base also for dynamic file time stamps, if no RTC
 * Add tested support and instructions for including into another project
-* Add support for Pico SDK STDOUT.TXT and STDERR.TXT
 
 * Move the PicoVD tool into examples/
 
