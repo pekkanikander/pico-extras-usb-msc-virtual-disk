@@ -6,31 +6,13 @@
 #include "vd_virtual_disk.h"
 #include "stdio_ring_buffer.h"
 #include "tusb_config.h"
-
-#ifndef PICOVD_STDOUT_FILE_NAME
-#define PICOVD_STDOUT_FILE_NAME "STDOUT.TXT"
-#endif
-#ifndef PICOVD_STDOUT_TAIL_FILE_NAME
-#define PICOVD_STDOUT_TAIL_FILE_NAME "STDOUT-TAIL.TXT"
-#endif
-#ifndef PICOVD_STDOUT_TAIL_UA_MINIMUM_AMOUNT
-#define PICOVD_STDOUT_TAIL_UA_MINIMUM_AMOUNT 128
-#endif
-#ifndef PICOVD_STDOUT_TAIL_UA_DELAY_SEC
-#define PICOVD_STDOUT_TAIL_UA_DELAY_SEC 10
-#endif
-#ifndef PICOVD_STDOUT_TAIL_UA_TIMEOUT_SEC
-#define PICOVD_STDOUT_TAIL_UA_TIMEOUT_SEC 30
-#endif
-
-#define STDOUT_NOTIFY_THRESHOLD 512
+#include "vd_files_stdout.h"
 
 // Timer to notify the host every UA_TIMEOUT_SEC seconds if no data has been written and not read
 static alarm_id_t tail_timeout_alarm = 0;
 
 /// -- STDOUT.TXT (classic growing log file semantics) --
 static int32_t stdout_file_content_cb(uint32_t offset, void* buf, uint32_t bufsize) {
-    memset(buf, 0, bufsize); // XXX TODO: is this needed?
     return stdio_ring_buffer_get_data(offset, buf, bufsize);
 }
 

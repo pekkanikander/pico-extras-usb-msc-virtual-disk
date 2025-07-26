@@ -10,6 +10,7 @@
 #include <boot/picobin.h>
 
 #include <vd_virtual_disk.h>
+#include <vd_files_stdout.h>
 
 int main()
 {
