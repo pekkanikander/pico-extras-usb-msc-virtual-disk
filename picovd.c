@@ -40,16 +40,18 @@ int main()
     // Add STDOUT.TXT files to the virtual disk
     vd_files_stdout_init();
 
+    // Print the PicoVD version, with at least 128 bytes, to get it exposed
+    // through the exFAT file system.
+    printf("PicoVD:" PICO_PROGRAM_VERSION_STRING " " PICO_PROGRAM_NAME "\n");
+    printf("Padding padding padding padding padding padding padding padding\n");
+    printf("Padding padding padding padding padding padding padding padding\n");
+    printf("Padding padding padding padding padding padding padding padding\n");
+    printf("Padding padding padding padding padding padding padding padding\n");
+    fflush(stdout);
+
     // main run loop
     while (true) {
         // TinyUSB device task, must be called regurlarly
         tud_task();
-#if 0
-        if (tud_cdc_n_connected(0)) {
-            // print on CDC 0 some debug message
-            printf("Connected to CDC 0\n");
-            sleep_ms(5000); // wait for 5 seconds
-        }
-#endif
     }
 }
