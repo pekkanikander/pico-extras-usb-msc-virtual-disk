@@ -9,6 +9,8 @@
 #include <pico/bootrom.h>
 #include <boot/picobin.h>
 
+#include <vd_virtual_disk.h>
+
 int main()
 {
     // Initialize XIP and flash, necessary when running as a no_flash binary
@@ -33,6 +35,9 @@ int main()
 
     // let pico sdk use the first cdc interface for std io
     stdio_init_all();
+
+    // Add STDOUT.TXT files to the virtual disk
+    vd_files_stdout_init();
 
     // main run loop
     while (true) {
