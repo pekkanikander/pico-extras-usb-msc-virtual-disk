@@ -3,13 +3,12 @@
 **Work in progress**
 
 PicoVD lets you mount your RP2350 project as a read-only USB disk
-over USB Mass-Storage (MSC),
-making your Pico App to appear as a USB Memory Stick.
+over USB Mass-Storage (MSC), making your Pico App to appear as a USB Memory Stick.
 The "files" or directories are not stored anywhere, but generated on the fly,
-requiring a minimal memory footprint.  The code itself takes only 5–10 kB,
-depending on the compile-time options. PicoVD may directly expose the Pico memory
-contents as files, including RP2350 BootROM flash partitions,
-each as a separate file.
+requiring a minimal memory footprint.
+The code itself takes only 5–10 kB, depending on the compile-time options.
+PicoVD may directly expose the Pico memory contents as files,
+including the RP2350 BootROM flash partitions, if any, each as a separate file.
 
 There is an API (being developed) for adding application specific files.
 
@@ -21,45 +20,40 @@ but it works also as a standalone app, running from the SRAM by default.
 - Generates ExFAT files and file contents on the fly
 - Supports adding your own files (work in progress)
 - May expose RP2350 BootROM flash partitions, each as a read-only file (`.BIN`)
-- Falls back to a single `FLASH.BIN` if no partition table is found
+- May also expose the whole flash as a single `FLASH.BIN` file
 - May expose other memory regions (ROM, SRAM) as additional `.BIN` files
 - Supports `STDOUT.TXT` for debugging
-- Tiny memory footprint - about 5kB
+- Tiny memory footprint
 
 ### How it works
 
 1. Implements **USB Memory Stick ** using TinyUSB MSC.
 
 Implements a strictly read-only memory stick, allowing the Pico to be removed
-or the Pico firmware to detach USB without the host OS complaining about the
+or the Pico firmware to detach USB without the host OS complaining (much) about the
 memory stick having been disconnected or turned off without being ejected.
 
-This is implemented as TinyUSB MSC callbacks
-and largely independent from RP2350 code.
-Adding support for other MCUs and SDKs should be straigtforward.
+The exFAT layer is implemented as TinyUSB MSC callbacks and largely independent from RP2350 code.
+Adding support for other MCUs and SDKs should be relatively straigtforward.
 
 2. **Generates a Virtual exFAT disk**
 
 Generates an exFAT disk image on the fly, requiring only a few kilobytes
 of program memory and less than a kilobyte of SRAM.
 Depending on compile time options,
-the SRAM usage can be scaled down to about one hundred bytes.
+the sram usage can be scaled down to about two hundred bytes
+(other than stack),
+if you leave out all the included file examples and just implement
+your own file.
 
 NB. At this point, PicoVD does not support subfolders.
 All files must be placed in the root directory.
 However, nothing prevents one from extending the code to support subfolders.
 
-Currently the virtual addresses (LBAs) must be allocated at compile time.
-In practice, this means that while your Pico app may decide whether any given
-file is present and visible in the root directory or not,
-only a fixed, compile-time defined set of files can be supported.
-
 3. **Provides compile-time and run-time APIs for files**
 
 Implements an API (WIP, not ready yet) that allow files to defined
 either at compile-time or at run-time.
-However, even for the runtime-time defined files,
-their virtual address (LBA) must be defined at compile time.
 
 4. **Exposes RP2350 memory regions as files**
 
@@ -105,16 +99,15 @@ By default, PicoVD runs from SRAM, not changing the contents of your flash.
 By default, most operating systems cache USB MSC volume data
 and may not notice changes to a file until
 their cache expires (often several seconds or more).
-PicoVD’s virtual files (for example, `SRAM.BIN` or a dynamic `VERSION.txt`)
+PicoVD’s virtual files (for example, `SRAM.BIN` or a dynamic `CHANGING.TXT`)
 can change each time they are read.
-To ensure the host sees the latest data, you have two options:
 
-1. **Bypass the host cache**
+### Bypassing the host cache
 
 Open the file with caching disabled so every read goes straight to the device.
 For example, on macOS:
 ```c
-   int fd = open("/Volumes/PICO_VD/VERSION.txt", O_RDONLY);
+   int fd = open("/Volumes/PICO_VD/CHANGING.TXT", O_RDONLY);
    fcntl(fd, F_NOCACHE, 1);  // disable buffer cache on this descriptor
    read(fd, buf, bufsize);
    close(fd);
@@ -123,11 +116,11 @@ For example, on macOS:
 In Linux, you can use the `nocache` command:
 ```bash
    # If you have the 'nocache' utility installed (e.g. via your package manager):
-   nocache cat /media/PICO_VD/VERSION.txt
+   nocache cat /media/PICO_VD/CHANGING.TXT
 ```
 or you can open the file with `O_DIRECT`:
 ```c
-   int fd = open("/media/PICO_VD/VERSION.txt", O_RDONLY | O_DIRECT);
+   int fd = open("/media/PICO_VD/CHANGING.TXT", O_RDONLY | O_DIRECT);
    read(fd, buf, bufsize);
    close(fd);
 ```
@@ -135,11 +128,13 @@ This guarantees each access fetches fresh content.
 
 For convenience, `tools/ncat.c` is a small non-caching utility for macOS.
 
-2. **Force a full remount**
+### Forcing a remount by simulating media change
 
 When you need the operating system to throw away all cached metadata and data,
 for example, after changing root directory entries,
-the device can simulate a very brief USB disconnect/reconnect.
+the device can either simulate a media change or a very brief USB disconnect/reconnect.
+(Technically, the so-called media change is an SCSI Unit Attention (UA) 0x28 notification,
+which most operating systems interpret as a media change.)
 This causes the host to unmount and immediately remount the drive,
 picking up every update at once.
 
@@ -177,7 +172,7 @@ due to limitations of the MSC SCSI layer and due to
 
 ## Using as a library in your own project
 
-**Work in progress**: TBD.
+**Work in progress**
 
 ### Adding your own files
 
@@ -219,8 +214,8 @@ or any data that is fixed in the firmware binary.
 To define a static file, use the `PICOVD_DEFINE_FILE_STATIC` macro:
 
 ```c
-// Define a static file (e.g., "README.TXT" with size 256 bytes)
-PICOVD_DEFINE_FILE_STATIC(my_static_file, "README.TXT", 256);
+// Define a static file, "README.TXT", starting at cluster 100 with size 256 bytes)
+PICOVD_DEFINE_FILE_STATIC(my_static_file, "README.TXT", 100, 256);
 ```
 - The file is always read-only. Other file attributes are currently not supported.
 - The file name must be a string literal (e.g., "README.TXT"),
@@ -229,7 +224,9 @@ PICOVD_DEFINE_FILE_STATIC(my_static_file, "README.TXT", 256);
 - All static files are auto-collected at link time and
   automatically provided into the virtual disk root directory.
 - Currently there is no clear API to provide the file contents.
-  This will be fixed in a future version.
+  You have to implement your own sector reader for reading the
+  sectors that serve your indicated cluster(s).
+  Adding an API for this is work in progress.
 
 ## Design choices
 
@@ -318,19 +315,6 @@ and dynamically generated metadata.
 
 See [`doc/ExFAT-design.md`](./doc/ExFAT-design.md) for further details.
 
-## Background information
-
-### RP2350 BootROM partition table
-
-The RP2350 BootROM embeds a flexible "partition table" in on-flash metadata, see:
-
-- **Datasheet § 5.9.4.1 "PARTITION_TABLE item"** describes the on-flash format:
-  each entry holds a 16-byte name, a start and end page (4 KiB pages), and flags.
-- **Datasheet § 5.9.1** limits the partition-table block to 640 bytes.
-- **SDK spec § 4.5.5.5.22** and **BootROM API § 5.4.8.16**
-  (`get_partition_table_info`) explain how to invoke the ROM routine and
-  retrieve those entries directly into RAM.
-
 ## Testing
 
 We provide a small suite of pytest-based unit tests to verify
@@ -355,3 +339,16 @@ Currently we use mainly the macOS `fsck.exfat`.
 python3 -m pytest tests/test_*
 ```
 This will run tests for the boot sector, reserved sectors, VBR checksum, etc.
+
+## Background information
+
+### RP2350 BootROM partition table
+
+The RP2350 BootROM embeds a flexible "partition table" in on-flash metadata, see:
+
+- **Datasheet § 5.9.4.1 "PARTITION_TABLE item"** describes the on-flash format:
+  each entry holds a 16-byte name, a start and end page (4 KiB pages), and flags.
+- **Datasheet § 5.9.1** limits the partition-table block to 640 bytes.
+- **SDK spec § 4.5.5.5.22** and **BootROM API § 5.4.8.16**
+  (`get_partition_table_info`) explain how to invoke the ROM routine and
+  retrieve those entries directly into RAM.
