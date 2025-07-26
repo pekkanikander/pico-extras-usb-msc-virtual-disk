@@ -4,6 +4,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
 #include <time.h>
 
 #include <wchar.h>
@@ -26,8 +27,8 @@ typedef enum  {
 
 // Function pointer type for LBA region handlers: fetch or generate bufsize number of bytes
 // at the given LBA + offset into the provided buffer.
-typedef void (*usb_msc_lba_read10_fn_t)(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
-typedef void (*vd_file_sector_get_fn_t)(uint32_t offset, void* buf, uint32_t bufsize);
+typedef int32_t (*usb_msc_lba_read10_fn_t)(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
+typedef int32_t (*vd_file_sector_get_fn_t)(uint32_t offset, void* buf, uint32_t bufsize);
 
 // ---------------------------------------------------------------
 // Virtual Disk File Structures
@@ -109,7 +110,7 @@ typedef struct vd_static_file_s vd_static_file_t; // Opaque, see vd_exfat_dirs.h
  *
  * For usage examples, see the README.
  */
-#define PICOVD_DEFINE_FILE_STATIC(struct_name, file_name_str, file_size_bytes) \
+#define PICOVD_DEFINE_FILE_STATIC(struct_name, file_name_str, file_first_cluster, file_size_bytes) \
     static const uint32_t struct_name ## _creation_time = vd_exfat_dirs_make_timestamp(PICOVD_PARAM_STATIC_FILE_CREATION_TIME); \
     const vd_static_file_t struct_name \
     __attribute__((section("flashdata_picovd_static_directory_entries"), used, aligned(4))) = { \
@@ -129,7 +130,7 @@ typedef struct vd_static_file_s vd_static_file_t; // Opaque, see vd_exfat_dirs.h
             .name_hash = vd_exfat_dirs_compute_name_hash(STR_UTF16_EXPAND(file_name_str), \
                             PICOVD_UTF16_STRING_LEN(STR_UTF16_EXPAND(file_name_str))), \
             .valid_data_length = file_size_bytes, \
-            .first_cluster = 0, \
+            .first_cluster = file_first_cluster, \
             .data_length = file_size_bytes, \
         }, \
         .file_name_entry = { \
@@ -241,8 +242,8 @@ extern int32_t vd_virtual_disk_read(uint32_t lba, uint32_t offset, void* buf, ui
 // XXX FIXME: Move to rp2350.h
 // ---------------------------------------------------------------
 
-extern void vd_file_sector_get_bootrom(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
-extern void vd_file_sector_get_sram(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
-extern void vd_file_sector_get_flash(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
+extern int32_t vd_file_sector_get_bootrom(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
+extern int32_t vd_file_sector_get_sram(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
+extern int32_t vd_file_sector_get_flash(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
 
 #endif // VD_VIRTUAL_DISK_H

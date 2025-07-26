@@ -93,7 +93,7 @@ static_assert(sizeof(exfat_root_dir_first_entries_data)
 // ---------------------------------------------------------------------------
 // Generate a slice of a root directory sector, as requested by the MSC layer.
 // ---------------------------------------------------------------------------
-void exfat_generate_root_dir_fixed_sector(uint32_t __unused lba, uint32_t offset, void* buffer, uint32_t bufsize) {
+int32_t exfat_generate_root_dir_fixed_sector(uint32_t __unused lba, uint32_t offset, void* buffer, uint32_t bufsize) {
 
     assert(lba == EXFAT_ROOT_DIR_START_LBA);
 
@@ -164,6 +164,7 @@ void exfat_generate_root_dir_fixed_sector(uint32_t __unused lba, uint32_t offset
 
     // Mark the rest of the buffer as unused
     memset(buf, exfat_entry_type_unused, len);
+    return bufsize;
 }
 
 // ---------------------------------------------------------------------------
@@ -257,7 +258,7 @@ static int32_t  current_slot_idx = -1;  ///< partition index currently in slot_b
 // ---------------------------------------------------------------------------
 // Generate a slice of a *dynamic* root-directory sector
 // ---------------------------------------------------------------------------
-void exfat_generate_root_dir_dynamic_sector(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize) {
+int32_t exfat_generate_root_dir_dynamic_sector(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize) {
 
     assert(lba > EXFAT_ROOT_DIR_START_LBA &&
            lba < EXFAT_ROOT_DIR_START_LBA + EXFAT_ROOT_DIR_LENGTH_SECTORS);
@@ -290,4 +291,5 @@ void exfat_generate_root_dir_dynamic_sector(uint32_t lba, uint32_t offset, void*
     } else {
         memset(buf, exfat_entry_type_unused, bufsize); // Fill with unused entries
     }
+    return bufsize;
 }

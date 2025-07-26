@@ -36,7 +36,7 @@ static size_t   dynamic_cluster_map_count = 0;
 typedef struct {
     uint32_t first_cluster;
     size_t   max_file_size_bytes;
-    void   (*handler)(uint32_t file_offset, void* buf, uint32_t bufsize);
+    vd_file_sector_get_fn_t handler;
 } dynamic_cluster_map_entry_t;
 
 #ifndef PICOVD_PARAM_MAX_DYNAMIC_FILES
@@ -46,7 +46,7 @@ typedef struct {
 static dynamic_cluster_map_entry_t dynamic_cluster_map[PICOVD_PARAM_MAX_DYNAMIC_FILES];
 
 // Allocates clusters for a dynamic file and registers its handler
-static uint32_t vd_dynamic_cluster_alloc(size_t region_size_bytes, void (*handler)(uint32_t file_offset, void* buf, uint32_t bufsize)) {
+static uint32_t vd_dynamic_cluster_alloc(size_t region_size_bytes, vd_file_sector_get_fn_t handler) {
     const size_t cluster_size_bytes = EXFAT_BYTES_PER_SECTOR * EXFAT_SECTORS_PER_CLUSTER;
     size_t clusters_needed = (region_size_bytes + cluster_size_bytes - 1) / cluster_size_bytes;
 
@@ -72,7 +72,7 @@ static uint32_t vd_dynamic_cluster_alloc(size_t region_size_bytes, void (*handle
 static int vd_dynamic_cluster_realloc(vd_dynamic_file_t *file, size_t size_bytes) {
     // Find the file's entry in the dynamic_cluster_map
     size_t i;
-    for (i = 0; i < dynamic_cluster_map_count; ++i) {
+    for (i = 0; i < dynamic_cluster_map_count; i++) {
         if (dynamic_cluster_map[i].first_cluster == file->first_cluster) {
             break;
         }
@@ -83,6 +83,7 @@ static int vd_dynamic_cluster_realloc(vd_dynamic_file_t *file, size_t size_bytes
     if (size_bytes > dynamic_cluster_map[i].max_file_size_bytes) {
         return -2;
     }
+    // There is no need to reallocate clusters: the requested size is already within the allocated region.
     return 0;
 }
 
@@ -105,17 +106,17 @@ typedef struct {
     uint32_t        next_lba; // Next LBA after this region
 } lba_region_t;
 
-static void gen_boot_sector(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
-static void gen_extb_sector(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
-static void gen_zero_sector(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
-static void gen_cksm_sector(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
-static void gen_fat0_sector(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
-static void gen_ones_sector(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
-static void gen_upcs_sector(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
-static void gen_dirs_sector(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
+static int32_t gen_boot_sector(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
+static int32_t gen_extb_sector(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
+static int32_t gen_zero_sector(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
+static int32_t gen_cksm_sector(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
+static int32_t gen_fat0_sector(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
+static int32_t gen_ones_sector(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
+static int32_t gen_upcs_sector(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
+static int32_t gen_dirs_sector(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
 
 // Forward declaration for dynamic area handler
-static void vd_dynamic_area_handler(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
+static int32_t vd_dynamic_area_handler(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize);
 
 // Region table: each entry defines a region of the virtual disk
 static const lba_region_t lba_regions[] = {
@@ -197,14 +198,16 @@ static inline uint32_t get_volume_serial_number(void) {
 }
 
 // Sector generators
-static void gen_zero_sector(uint32_t lba __unused, uint32_t offset __unused, void* buf, uint32_t bufsize) {
+static int32_t gen_zero_sector(uint32_t lba __unused, uint32_t offset __unused, void* buf, uint32_t bufsize) {
     memset(buf, 0, bufsize);
+    return bufsize;
 }
 
-static void gen_ones_sector(uint32_t lba __unused, uint32_t offset __unused, void* buf, uint32_t bufsize) {
+static int32_t gen_ones_sector(uint32_t lba __unused, uint32_t offset __unused, void* buf, uint32_t bufsize) {
     memset(buf, 0xff, bufsize);
+    return bufsize;
 }
-static void gen_extb_sector_signature(uint32_t offset, uint8_t *buffer, uint32_t bufsize) {
+static int32_t gen_extb_sector_signature(uint32_t offset, uint8_t *buffer, uint32_t bufsize) {
     // Generate an extended boot sector with the signature bytes 0x55 and 0xAA
     // at the end of the sector, if they fall within the requested offset and size.
     assert(offset < MSC_BLOCK_SIZE);
@@ -220,14 +223,18 @@ static void gen_extb_sector_signature(uint32_t offset, uint8_t *buffer, uint32_t
     if (offset + bufsize > posAA && offset < posAA) {
         buffer[posAA - offset] = 0xAA;
     }
+    return bufsize;
 }
 
-static void gen_extb_sector(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize) {
-    gen_zero_sector(lba, offset, buf, bufsize);
-    gen_extb_sector_signature(offset, buf, bufsize);
+static int32_t gen_extb_sector(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize) {
+    int32_t rc = gen_zero_sector(lba, offset, buf, bufsize);
+    assert(rc == bufsize);
+    rc = gen_extb_sector_signature(offset, buf, bufsize);
+    assert(rc == bufsize);
+    return bufsize;
 }
 
-static void gen_boot_sector(uint32_t lba __unused, uint32_t offset, void* buf, uint32_t bufsize) {
+static int32_t gen_boot_sector(uint32_t lba __unused, uint32_t offset, void* buf, uint32_t bufsize) {
     uint8_t *base = (uint8_t *)buf;
     uint8_t *out = (uint8_t *)buf;
     uint32_t pos = offset;
@@ -262,7 +269,7 @@ static void gen_boot_sector(uint32_t lba __unused, uint32_t offset, void* buf, u
     }
 
     // 4) Fill the sector signature bytes at the end of the buffer
-    gen_extb_sector_signature(offset, buf, bufsize);
+    return gen_extb_sector_signature(offset, buf, bufsize);
 }
 
 /**
@@ -333,7 +340,7 @@ static uint32_t compute_vbr_checksum_runtime(void) {
 }
 
 
-static void gen_cksm_sector(uint32_t lba __unused, uint32_t offset, void* buffer, uint32_t bufsize) {
+static int32_t gen_cksm_sector(uint32_t lba __unused, uint32_t offset, void* buffer, uint32_t bufsize) {
     // For the math, see the C++ source file vd_exfat.cpp
 
     // Sanity-check slice bounds for checksum sector
@@ -357,9 +364,10 @@ static void gen_cksm_sector(uint32_t lba __unused, uint32_t offset, void* buffer
         uint32_t byte_index = abs_pos & 3;
         base8[i] = (checksum_value >> (8 * byte_index)) & 0xFF;
     }
+    return bufsize;
 }
 
-static void gen_fat0_sector(uint32_t lba __unused,
+static int32_t gen_fat0_sector(uint32_t lba __unused,
                             uint32_t offset,
                             void*    buffer,
                             uint32_t bufsize)
@@ -374,9 +382,10 @@ static void gen_fat0_sector(uint32_t lba __unused,
         if (copy_len > bufsize) copy_len = bufsize;
         memcpy(buffer, data + offset, copy_len);
     }
+    return bufsize;
 }
 
-static void gen_upcs_sector(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize)
+static int32_t gen_upcs_sector(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize)
 {
     // Ensure buffer and offsets are 16-bit aligned
     assert(((uintptr_t)buf & 1) == 0);
@@ -408,10 +417,11 @@ static void gen_upcs_sector(uint32_t lba, uint32_t offset, void* buf, uint32_t b
         }
         out[i] = value;
     }
+    return bufsize;
 }
 
 // Handler for the dynamic area: looks up the cluster map and calls the file handler
-static void vd_dynamic_area_handler(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize) {
+static int32_t vd_dynamic_area_handler(uint32_t lba, uint32_t offset, void* buf, uint32_t bufsize) {
     // Compute cluster number from LBA
     uint32_t cluster = ((lba - EXFAT_CLUSTER_HEAP_START_LBA) / EXFAT_SECTORS_PER_CLUSTER) + EXFAT_CLUSTER_HEAP_START_CLUSTER;
     uint32_t cluster_offset = (lba % EXFAT_SECTORS_PER_CLUSTER) * EXFAT_BYTES_PER_SECTOR + offset;
@@ -427,20 +437,15 @@ static void vd_dynamic_area_handler(uint32_t lba, uint32_t offset, void* buf, ui
                 if (file_offset + to_copy > entry->max_file_size_bytes) {
                     to_copy = entry->max_file_size_bytes - file_offset;
                 }
-                entry->handler(file_offset, buf, to_copy);
-                if (to_copy < bufsize) {
-                    memset((uint8_t*)buf + to_copy, 0, bufsize - to_copy);
-                }
-                return;
+                return entry->handler(file_offset, buf, to_copy);
             } else {
-                // Out of file bounds: zero-fill
-                memset(buf, 0, bufsize);
-                return;
+                // Out of file bounds
+                return 0;
             }
         }
     }
-    // Not found: zero-fill
-    memset(buf, 0, bufsize);
+    // Not found
+    return 0;
 }
 
 // Read10 callback: serve LBA regions defined in the lba_regions table
@@ -453,8 +458,16 @@ int32_t vd_virtual_disk_read(uint32_t lba,
     // Check LBA against the region table
     for (size_t i = 0; i < sizeof(lba_regions) / sizeof(lba_region_t); i++) {
         if (lba < lba_regions[i].next_lba) {
-            lba_regions[i].handler(lba, offset, buffer, bufsize);
-            return bufsize; // Return full sector size
+            int32_t rc = lba_regions[i].handler(lba, offset, buffer, bufsize);
+            if (rc < 0) {
+                return rc;
+            }
+            assert(rc <= bufsize);
+            if (rc < bufsize) {
+                memset(buffer + rc, 0, bufsize - rc);
+                return bufsize; // Return full requested size
+            }
+            return rc;
         }
     }
     // Fallback for other LBAs: zero-filled

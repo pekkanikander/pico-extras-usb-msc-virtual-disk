@@ -11,7 +11,7 @@
 
 #include "vd_virtual_disk.h"
 
-static void changing_file_content_cb(uint32_t offset, void* buffer, uint32_t bufsize) {
+static int32_t changing_file_content_cb(uint32_t offset, void* buffer, uint32_t bufsize) {
 
     absolute_time_t now = get_absolute_time();
 
@@ -25,6 +25,7 @@ static void changing_file_content_cb(uint32_t offset, void* buffer, uint32_t buf
     int len = snprintf((char*)buffer, bufsize, FORMAT_STRING,
                       hours, mins, secs,
                       offset, bufsize);
+    return len;
 }
 
 PICOVD_DEFINE_FILE_RUNTIME(
