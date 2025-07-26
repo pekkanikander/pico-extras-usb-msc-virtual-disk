@@ -13,6 +13,7 @@ target_sources(picovd INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}/vd_files_rp2350.c
     ${CMAKE_CURRENT_LIST_DIR}/vd_files_changing.c
     ${CMAKE_CURRENT_LIST_DIR}/stdio_ring_buffer.c
+    ${CMAKE_CURRENT_LIST_DIR}/vd_files_stdout.c
 )
 
 target_include_directories(picovd INTERFACE ${CMAKE_CURRENT_LIST_DIR})

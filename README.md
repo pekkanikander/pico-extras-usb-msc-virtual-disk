@@ -77,13 +77,27 @@ Typically, the partitions are named, reflecting their aimed used.
 
 PicoVD allows these partitions to be exposed as individual files.
 
+6. **Exposes `stdout` or `printf` output as files**
+
+When using the Pico SDK `stdout`, by default PicoVD
+allows the print out to be stored into a ring buffer,
+whose contents are made available as two different files:
+
+* `STDOUT.TXT` — Complete log file showing output from the beginning.
+  If the ring buffer becomes full, the discarded contents are replaced with NULs.
+* `STDOUT-TAIL.TXT` — Tail file showing only unread output, for `tail -F`
+
+The contents of these files change dynamically.
+The files implementation periodically updates the host OS about this,
+by emulating a media change, i.e. disk ejection and reinsertion.
+
 ## Usage
 
 Boot your board to BOOTTSEL.
 Drop the provided `picovd-tool.uf2` binary to the USB Stick.
 
 Your Pico reboots and becomes visible as another USB Stick, `PicoVD`,
-allowing you to inspect the the Pico memory files.
+allowing you to inspect the the Pico memory files, stdout, etc.
 By default, PicoVD runs from SRAM, not changing the contents of your flash.
 
 ## Adding files and changing file contents on the fly
@@ -130,7 +144,36 @@ This causes the host to unmount and immediately remount the drive,
 picking up every update at once.
 
 Note that this will also cause a short break, as the USB device re-enumerates.
-During that break, some system calls accessing the file system may return errors.
+During that break, some system calls accessing the file system will return errors.
+
+### Using stdout files
+
+The stdout files provide real-time access to your Pico's `printf` output:
+
+**Reading the complete log:**
+```bash
+cat /Volumes/PICO_VD/STDOUT.TXT
+```
+If the log has grown larger than what fits into the ring buffer,
+the initial contents is read as NULs, which by default are invisible
+at your terminal.
+However, if you copy the output to a file, you may notice that the
+beginning of the file contains NULs.
+
+**Monitoring new output (tail -F style):**
+```bash
+tail -F /Volumes/PICO_VD/STDOUT-TAIL.TXT 2> /dev/null
+```
+
+By default, `tail -F` re-opens the file whenever it "disappears"
+and starts reading from the beginning.
+The `STDOUT-TAIL.TXT` implementation keeps track how much of the
+file has been read and exposes the next printouts.
+This gives pretty good semantics for `tail -F` so that you can
+use it for continuously printing out `stdout`.
+However, the data is provided in chunks of 64 bytes (the MSC endpoint buffer size),
+due to limitations of the MSC SCSI layer and due to
+[a bug in TinyUSB](https://github.com/pekkanikander/pico-tinyusb-msc-panic/tree/main).
 
 ## Using as a library in your own project
 
