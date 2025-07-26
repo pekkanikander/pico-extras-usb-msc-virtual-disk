@@ -10,6 +10,7 @@ import pytest
 import platform
 import subprocess
 import usb.core, usb.util
+import traceback
 
 from device_finder import find_msc_disk
 from exfat_utils import raw_sector_reader, find_directory_entry
@@ -73,6 +74,8 @@ def read_raw_sector(device):
     reader = raw_sector_reader(device)
     def _read(lba):
         try:
+            print(f"Attempting to read LBA: {lba}")
+            traceback.print_stack()
             return reader(lba)
         except IOError as e:
             pytest.skip(str(e))
