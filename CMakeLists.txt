@@ -23,8 +23,8 @@ endif()
 # ====================================================================================
 set(PICO_BOARD pico2 CACHE STRING "Board type")
 
-# Tell Pico SDK to use our slightly patched lib/tinyusb submodule,
-# instead of its bundled copy
+# Tell Pico SDK to use lib/tinyusb submodule, which follows upstream TinyUSB,
+# instead of its bundled copy (which is older and lacks tud_msc_inquiry2_cb)
 set(PICO_TINYUSB_PATH "${CMAKE_CURRENT_LIST_DIR}/lib/tinyusb")
 
 # Pull in Raspberry Pi Pico SDK (must be before project)
