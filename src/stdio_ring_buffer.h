@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#include "pico/stdio.h"
+#include <pico/stdio.h>
 
 typedef struct ring_buffer_s ring_buffer_t;
 

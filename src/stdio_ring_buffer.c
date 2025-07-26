@@ -1,9 +1,8 @@
 #include <assert.h>
 #include <string.h>
 
-#include "pico/mutex.h"
-#include "pico/stdio/driver.h"
-#include "vd_virtual_disk.h"
+#include <pico/mutex.h>
+#include <pico/stdio/driver.h>
 
 #include "stdio_ring_buffer.h"
 
@@ -116,7 +115,7 @@ static void stdio_ring_buffer_out_chars(const char *buf, int len) {
 }
 
 static void stdio_ring_buffer_out_flush(void) {
-    vd_virtual_disk_contents_changed(false);
+    // Currently no-op
 }
 
 static int stdio_ring_buffer_in_chars(char *buf, int length) {
